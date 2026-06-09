@@ -42,6 +42,8 @@ function missingEnv() {
 
 // ── 서명: message = "{ts}.{method}.{uri}" → HMAC-SHA256 → base64 ──
 function sign(ts, method, uri) {
+  const miss = missingEnv();
+  if (miss.length) throw new Error('네이버 환경변수 누락(' + miss.join(', ') + ') — .env 또는 Vercel 환경변수를 설정하세요.');
   return crypto.createHmac('sha256', SECRET).update(`${ts}.${method}.${uri}`).digest('base64');
 }
 
