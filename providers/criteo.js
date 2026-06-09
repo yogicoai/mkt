@@ -1,0 +1,100 @@
+'use strict';
+
+// Criteo Marketing Solutions API 어댑터
+// 광고비/전환/전환매출 = statistics/report, 잔액 = (Retail Media 연동시) balances
+const { dash } = require('../naver-api'); // .env 로드 보장 + dash
+
+const ID = process.env.CRITEO_CLIENT_ID;
+const SECRET = process.env.CRITEO_CLIENT_SECRET;
+const ADV = process.env.CRITEO_ADVERTISER_ID;
+const RETAIL = process.env.CRITEO_RETAIL_ACCOUNT_ID;       // 선택: Retail Media 잔액용
+const V = process.env.CRITEO_API_VERSION || '2026-01';
+const VR = process.env.CRITEO_RETAIL_VERSION || '2025-07';
+
+function enabled() { return !!ID && !!SECRET && !!ADV; }
+
+let _tok = null, _exp = 0;
+async function token() {
+  if (_tok && Date.now() < _exp) return _tok;
+  const res = await fetch('https://api.criteo.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: ID, client_secret: SECRET }),
+  });
+  const j = await res.json();
+  if (!j.access_token) throw new Error('Criteo 토큰 실패: ' + JSON.stringify(j));
+  _tok = j.access_token;
+  _exp = Date.now() + ((j.expires_in || 900) - 60) * 1000; // 15분 만료 - 여유 60s
+  return _tok;
+}
+
+async function balance(tok) {
+  if (!RETAIL) return null;
+  try {
+    const res = await fetch(`https://api.criteo.com/${VR}/retail-media/accounts/${RETAIL}/balances?pageSize=100`, {
+      headers: { Authorization: `Bearer ${tok}` },
+    });
+    const j = await res.json();
+    const data = j.data || [];
+    let dep = 0, sp = 0, rem = 0, hasRem = false;
+    for (const b of data) {
+      const at = b.attributes || b;
+      dep += +at.deposited || 0;
+      sp += +at.spent || 0;
+      if (at.remaining != null) { rem += +at.remaining; hasRem = true; }
+    }
+    return hasRem ? Math.round(rem) : Math.round(dep - sp);
+  } catch (_) { return null; }
+}
+
+module.exports = {
+  id: 'criteo',
+  label: 'Criteo',
+  enabled,
+  async getSummary(date) {
+    const tok = await token();
+    const d = dash(date);
+    const body = {
+      advertiserIds: Array.isArray(ADV) ? ADV.join(',') : String(ADV),
+      currency: 'KRW',
+      dimensions: ['Day'],
+      metrics: ['AdvertiserCost', 'SalesPc30dPv24h', 'RevenueGeneratedPc30dPv24h'],
+      startDate: d, endDate: d, format: 'json', timezone: 'Asia/Seoul',
+    };
+    const res = await fetch(`https://api.criteo.com/${V}/statistics/report`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    let j; try { j = JSON.parse(text); } catch { j = text; }
+    if (!res.ok) throw new Error('Criteo 통계 실패: ' + (typeof j === 'string' ? j.slice(0, 200) : JSON.stringify(j)));
+
+    let spend = 0, conv = 0, rev = 0;
+    if (j && Array.isArray(j.columns) && Array.isArray(j.data)) {
+      // 컬럼형 응답: { columns:[지표명], data:[[행값,...]], rows:행수 }
+      const idx = {};
+      j.columns.forEach((c, i) => { idx[String(c).toLowerCase()] = i; });
+      const get = (row, name) => { const i = idx[name.toLowerCase()]; return i == null ? 0 : +row[i] || 0; };
+      for (const row of (j.data || [])) {
+        spend += get(row, 'AdvertiserCost');
+        conv += get(row, 'SalesPc30dPv24h');
+        rev += get(row, 'RevenueGeneratedPc30dPv24h');
+      }
+    } else {
+      // 폴백: 객체배열 형태(format/버전에 따라)
+      const rows = j.Rows || j.rows || j.data || (Array.isArray(j) ? j : []);
+      for (const r of rows) {
+        spend += +(r.AdvertiserCost ?? r.advertiserCost ?? 0);
+        conv += +(r.SalesPc30dPv24h ?? r.salesPc30dPv24h ?? 0);
+        rev += +(r.RevenueGeneratedPc30dPv24h ?? r.revenueGeneratedPc30dPv24h ?? 0);
+      }
+    }
+    const bal = await balance(tok);
+    return [{
+      platform: 'Criteo',
+      spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev),
+      balance: bal, currency: 'KRW', note: bal == null ? '잔액=Retail Media 연동시' : '',
+    }];
+  },
+};

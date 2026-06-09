@@ -1,0 +1,17 @@
+# secrets (절대 커밋 금지)
+.env
+.env.local
+.env.*.local
+
+# dependencies / build
+node_modules/
+.next/
+.vercel/
+reports/
+
+# 로컬 전용 데이터/캐시 (운영은 Mongo KV 사용)
+gfa-manual.json
+ai-daily.json
+uploaded-campaigns.json
+_naver_kw.json
+*.log

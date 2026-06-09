@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>광고효율 대시보드</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<style>
+  /* ── 토스 스타일 디자인 시스템 ── */
+  :root{
+    --bg:#F2F4F6; --card:#fff; --sf:#fff; --sf2:#F2F4F6; --sf3:#F9FAFB;
+    --line:#E5E8EB; --bd:#E5E8EB; --bd2:#D1D6DB;
+    --tx:#191F28; --ink:#191F28; --tx2:#4E5968; --tx3:#8B95A1; --muted:#8B95A1;
+    --ac:#3182F6; --green:#3182F6; --green-d:#2272EB; --ac2:#1B64DA;
+    --ok:#15803d; --danger:#F04452; --red:#F04452; --warn:#FF8A00; --amber:#FF8A00;
+    --r:20px;
+    --sh:0 1px 3px rgba(0,0,0,.04), 0 6px 20px rgba(17,24,40,.045);
+    --sh2:0 4px 12px rgba(0,0,0,.06), 0 14px 36px rgba(17,24,40,.07);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Pretendard Variable","Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+       background:var(--bg);color:var(--tx);-webkit-font-smoothing:antialiased;
+       letter-spacing:-0.2px;font-feature-settings:"tnum"}
+  .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+
+  header{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:18px}
+  header h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-0.7px;color:var(--tx)}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--ac);box-shadow:0 0 0 4px rgba(49,130,246,.15)}
+  .acct{font-size:13px;color:var(--tx3);margin-left:auto;font-weight:500}
+
+  .flow{font-size:12.5px;color:var(--tx2);background:#fff;border:0;
+        border-radius:16px;padding:14px 18px;margin-bottom:18px;line-height:1.65;box-shadow:var(--sh)}
+  .flow b{color:var(--ac);font-weight:700}
+  .flow code{background:var(--sf2);border:0;border-radius:7px;padding:2px 7px;font-size:11px;color:var(--tx2)}
+
+  .controls{display:flex;gap:8px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+  input[type=date]{font:inherit;font-weight:600;padding:11px 14px;border:1px solid var(--bd);border-radius:12px;background:#fff;color:var(--tx);outline:none}
+  input[type=date]:focus{border-color:var(--ac)}
+  button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:11px 20px;cursor:pointer;
+         background:var(--ac);color:#fff;transition:.12s;letter-spacing:-0.3px}
+  button:hover{background:var(--green-d)}
+  button:active{transform:scale(.97)}
+  button:disabled{opacity:.45;cursor:wait}
+  .quick{display:flex;gap:6px}
+  .quick button,.qb{background:var(--sf2);color:var(--tx2);border:0;font-weight:600;padding:11px 14px;border-radius:12px;font-size:13px;letter-spacing:-0.3px}
+  .quick button:hover,.qb:hover{background:#E5E8EB}
+  .qb.on{background:var(--ac);color:#fff}
+  label{font-size:13px;color:var(--tx3);font-weight:500}
+  .tabs{display:flex;gap:2px;margin-bottom:18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .tab{background:none;border:0;border-bottom:2.5px solid transparent;border-radius:0;padding:11px 20px;font-weight:700;font-size:14.5px;color:var(--tx3);cursor:pointer;letter-spacing:-0.4px;transition:.12s}
+  .tab:hover{color:var(--tx2);background:none;transform:none}
+  .tab.on{color:var(--ac);border-bottom-color:var(--ac)}
+  .tabpane[hidden]{display:none}
+  .glossary{background:var(--sf2);border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:11.5px;color:var(--tx2);line-height:1.9}
+  .glossary b{color:var(--tx)}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+  .card{background:var(--card);border:0;border-radius:var(--r);padding:20px;box-shadow:var(--sh);transition:.15s}
+  .card:hover{box-shadow:var(--sh2);transform:translateY(-1px)}
+  .card .lbl{font-size:13px;color:var(--tx3);margin-bottom:10px;font-weight:600;letter-spacing:-0.3px}
+  .card .val{font-size:26px;font-weight:800;letter-spacing:-1px;color:var(--tx)}
+  .card .sub{font-size:12.5px;color:var(--tx3);margin-top:8px;font-weight:500}
+  .card.accent{background:linear-gradient(135deg,#3182F6,#1B64DA);color:#fff}
+  .card.accent .lbl,.card.accent .sub{color:rgba(255,255,255,.82)}
+  .card.accent .val{color:#fff}
+
+  .panel{background:var(--card);border:0;border-radius:var(--r);padding:22px;margin-bottom:16px;box-shadow:var(--sh)}
+  .panel h2{font-size:16px;margin:0 0 16px;font-weight:700;color:var(--tx);letter-spacing:-0.5px}
+  .chart-box{position:relative;height:300px}
+  .ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .ct{font-size:16px;font-weight:700;color:var(--tx);letter-spacing:-0.5px}
+  .ch-hint{font-size:12px;color:var(--tx3);margin-top:3px;font-weight:500}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:13px 10px;text-align:right;white-space:nowrap}
+  th{font-size:12px;color:var(--tx3);border-bottom:1px solid var(--line);cursor:pointer;user-select:none;font-weight:600}
+  th:first-child,td:first-child{text-align:left;white-space:normal}
+  th.sorted::after{content:" ▾";color:var(--ac)}
+  td{color:var(--tx);font-weight:500}
+  tbody tr{border-bottom:1px solid #F2F4F6}
+  tbody tr:last-child{border-bottom:0}
+  tbody tr:hover{background:var(--sf3)}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:7px;
+         background:var(--sf2);color:var(--tx2);margin-right:7px}
+  .badge.SHOPPING{background:#E8F3FF;color:#1B64DA}
+  .roas{font-weight:700;padding:3px 10px;border-radius:8px;font-size:12.5px}
+  .roas.hi{background:#E8F3FF;color:#1B64DA}
+  .roas.mid{background:#FFF4E5;color:#C2710C}
+  .roas.lo{background:#FEECEC;color:#E03131}
+  .roas.na{background:#F2F4F6;color:#ADB5BD}
+
+  .state{text-align:center;padding:60px 20px;color:var(--tx3);font-weight:500}
+  .spin{width:28px;height:28px;border:3px solid #E5E8EB;border-top-color:var(--ac);
+        border-radius:50%;animation:r 1s linear infinite;margin:0 auto 14px}
+  @keyframes r{to{transform:rotate(360deg)}}
+  .err{background:#FEECEC;border:0;color:#E03131;border-radius:14px;padding:16px 18px;font-size:13.5px;font-weight:500}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#D1D6DB;border-radius:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="dot"></span>
+    <h1>광고효율 대시보드</h1>
+    <span class="acct" id="acct"></span>
+  </header>
+
+  <div class="controls">
+    <input type="date" id="date" />
+    <button id="go">조회</button>
+    <div class="quick">
+      <button data-d="0">오늘</button>
+      <button data-d="1">어제</button>
+      <button data-d="7">7일전</button>
+    </div>
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;margin-left:auto">
+      <input type="checkbox" id="auto"> 60초 자동갱신</label>
+    <span id="updated" class="acct" style="margin-left:0"></span>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-tab="all">📊 전체</button>
+    <button class="tab" data-tab="utm">🔗 유입·매출</button>
+    <button class="tab" data-tab="naver">네이버</button>
+    <button class="tab" data-tab="meta">META</button>
+    <button class="tab" data-tab="criteo">크리테오</button>
+    <button class="tab" data-tab="camp">📥 업로드</button>
+    <button class="tab" data-tab="ai">🤖 AI 분석</button>
+  </div>
+
+  <div class="tabpane" data-pane="all">
+    <div class="flow">
+      <b>데이터 흐름</b> · 브라우저 → <code>로컬서버 API</code> → 각 매체 광고 API
+      &nbsp;|&nbsp; 🔒 API 키·서명은 <b>서버에서만</b> 처리(브라우저 비노출)
+    </div>
+    <div id="platforms"></div>
+    <div id="gfa"></div>
+    <div id="trend"></div>
+  </div>
+
+  <div class="tabpane" data-pane="naver" hidden>
+    <div id="content">
+      <div class="state"><div class="spin"></div>불러오는 중…</div>
+    </div>
+  </div>
+
+  <div class="tabpane" data-pane="meta" hidden>
+    <div id="meta"><div class="state" style="padding:40px">조회하면 META 요약이 표시됩니다</div></div>
+  </div>
+
+  <div class="tabpane" data-pane="criteo" hidden>
+    <div id="criteo"></div>
+  </div>
+
+  <div class="tabpane" data-pane="utm" hidden>
+    <div id="utm"><div class="state" style="padding:40px"><div class="spin"></div>유입·매출 불러오는 중…</div></div>
+  </div>
+
+  <div class="tabpane" data-pane="camp" hidden>
+    <div id="camp"><div class="state" style="padding:40px">캠페인 엑셀을 업로드하면 기간별로 정리됩니다</div></div>
+  </div>
+
+  <div class="tabpane" data-pane="ai" hidden>
+    <div id="ai"><div class="state" style="padding:40px">AI 분석 탭을 열면 기간·필요정보를 정해 분석합니다</div></div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const won = (n) => Number(n||0).toLocaleString('ko-KR');
+const dateEl = $('#date'), content = $('#content');
+let chart;
+let lastSum=null, lastStat=null;
+
+// 기본값: 어제
+function ymd(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
+(function init(){
+  dateEl.value=ymd(new Date()); dateEl.max=ymd(new Date());
+  load();
+  loadTrend(90);
+  renderCriteo();
+  loadGfa();
+})();
+
+$('#go').addEventListener('click', load);
+document.querySelectorAll('.quick button').forEach(b=>b.addEventListener('click',()=>{
+  const d=new Date(); d.setDate(d.getDate()-Number(b.dataset.d)); dateEl.value=ymd(d); load();
+}));
+let timer=null;
+$('#auto').addEventListener('change',e=>{
+  clearInterval(timer); timer=null;
+  if(e.target.checked) timer=setInterval(load,60000);
+});
+
+// ── 탭 전환 ──
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  const t=b.dataset.tab;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.tabpane').forEach(p=>{ p.hidden = p.dataset.pane!==t; });
+  // 숨김 상태에서 그려진 차트 크기 보정
+  if(t==='naver' && chart) try{ chart.resize(); }catch(_){}
+  if(t==='all' && trendChart) try{ trendChart.resize(); }catch(_){}
+  if(t==='utm' && !utmLoaded){ const [a,z]=urRange('tdy'); loadUtm(a,z); }
+  if(t==='meta' && !metaLoaded){ const [a,z]=urRange('tdy'); loadMeta(a,z); }
+  if(t==='ai' && !aiLoaded){ aiLoaded=true; renderAiSetup(); }
+  if(t==='camp' && !campLoaded){ campLoaded=true; loadCamp(); }
+}));
+// META 캠페인행 클릭 → 소재 드릴다운 (위임)
+$('#meta').addEventListener('click',(e)=>{ const tr=e.target.closest&&e.target.closest('.meta-camp-row'); if(tr && $('#meta').contains(tr)) toggleMetaAds(tr); });
+
+// ── META 탭 (캠페인 → 소재 드릴다운, 기간 기반) ──
+let metaLoaded=false, metaStart=null, metaEnd=null;
+async function loadMeta(start,end){
+  metaLoaded=true; metaStart=start; metaEnd=end;
+  $('#meta').innerHTML='<div class="state" style="padding:40px"><div class="spin"></div>META 캠페인·소재 불러오는 중…</div>';
+  try{
+    const r=await fetch('/api/meta?start='+start+'&end='+end); const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'실패');
+    renderMetaTab(j);
+  }catch(e){ $('#meta').innerHTML='<div class="err" style="margin:10px 0">META 조회 실패: '+e.message+'</div>'; }
+}
+function renderMetaTab(j){
+  metaStart=j.start; metaEnd=j.end;
+  const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const RK=[['tdy','오늘'],['tm','이번달'],['lm','지난달'],['30','최근30일']];
+  const curKind=RK.map(r=>r[0]).find(k=>{const x=urRange(k);return x[0]===j.start&&x[1]===j.end;});
+  const rbtns=RK.map(r=>'<button class="qb'+(curKind===r[0]?' on':'')+'" data-mr="'+r[0]+'">'+r[1]+'</button>').join('');
+  let html='<div class="panel" style="margin-bottom:14px"><div class="ch" style="border:0;padding:0 0 10px">'
+    +'<div><div class="ct">META 광고 성과 <span style="font-size:12px;color:var(--tx3)">(요기보·샐리필)</span></div><div class="ch-hint">'+j.start+' ~ '+j.end+' · 캠페인 → 소재별</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="date" id="mStart" value="'+j.start+'"><span style="color:var(--tx3)">~</span><input type="date" id="mEnd" value="'+j.end+'"><button id="mGo">조회</button>'+rbtns+'</div></div>'
+    +'<div class="glossary" style="margin:0">💡 <b>장바구니</b>=담기(add_to_cart) · <b>구매</b>=실결제(purchase) · <b>ROAS</b>=구매매출÷광고비. 캠페인 행을 클릭하면 소재(광고)별로 펼쳐집니다(썸네일 포함). 전환은 Meta 자체 집계예요.</div></div>';
+  for(const a of j.accounts){
+    const t=a.totals;
+    const cards='<div class="cards">'
+      +'<div class="card accent"><div class="lbl">'+esc(a.platform)+' 구매매출</div><div class="val">'+won(t.purchVal)+'<span style="font-size:13px">원</span></div><div class="sub">광고비 '+won(t.spend)+'원 · ROAS '+won(t.roas)+'%</div></div>'
+      +'<div class="card"><div class="lbl">구매 / 장바구니</div><div class="val">'+won(t.purch)+'<span style="font-size:13px;color:var(--muted)">건</span></div><div class="sub">장바구니 '+won(t.cart)+'건 · 클릭 '+won(t.clk)+'</div></div>'
+      +'</div>';
+    const rows=a.campaigns.filter(c=>c.spend>0||c.imp>0);
+    const body=rows.length? rows.map(c=>'<tr class="meta-camp-row" data-acct="'+esc(a.id)+'" data-camp="'+esc(c.id)+'" data-name="'+esc(c.name)+'" style="cursor:pointer">'
+      +'<td style="text-align:left">'+esc(c.name)+' <span style="color:var(--ac);font-size:10px">▸소재</span></td>'
+      +'<td>'+won(c.spend)+'</td><td>'+won(c.imp)+'</td><td>'+won(c.clk)+'</td><td>'+c.ctr+'%</td>'
+      +'<td>'+won(c.cart)+'</td><td>'+won(c.purch)+'</td><td>'+won(c.purchVal)+'</td>'
+      +'<td><span class="roas '+cls(c.roas)+'">'+won(c.roas)+'%</span></td></tr>').join('')
+      : '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:14px">이 기간 데이터 없음</td></tr>';
+    html+='<div class="panel"><h2>'+esc(a.platform)+'</h2>'+cards
+      +'<table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>장바구니</th><th>구매</th><th>구매매출</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  }
+  $('#meta').innerHTML=html;
+  $('#mGo').addEventListener('click',()=>{ if($('#mStart').value&&$('#mEnd').value) loadMeta($('#mStart').value,$('#mEnd').value); });
+  $('#meta').querySelectorAll('[data-mr]').forEach(b=>b.addEventListener('click',()=>{ const [a,z]=urRange(b.dataset.mr); loadMeta(a,z); }));
+}
+async function toggleMetaAds(tr){
+  const acct=tr.dataset.acct, camp=tr.dataset.camp, name=tr.dataset.name||'';
+  const nx=tr.nextElementSibling;
+  if(nx && nx.classList.contains('meta-ad-detail')){ nx.remove(); return; }
+  const det=document.createElement('tr'); det.className='meta-ad-detail';
+  det.innerHTML='<td colspan="9" style="background:var(--sf2);padding:12px 16px"><div class="state" style="padding:14px"><div class="spin"></div>소재 불러오는 중…</div></td>';
+  tr.after(det);
+  try{
+    const r=await fetch('/api/meta-ads?account='+encodeURIComponent(acct)+'&campaign='+encodeURIComponent(camp)+'&start='+metaStart+'&end='+metaEnd);
+    const j=await r.json(); if(!j.ok) throw new Error(j.error||'실패');
+    det.firstChild.innerHTML=metaAdTable(j,name);
+  }catch(e){ det.firstChild.innerHTML='<div style="color:#c2362f">소재 조회 실패: '+e.message+'</div>'; }
+}
+function metaAdTable(j,name){
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
+  if(!j.ads.length) return '<div style="color:var(--tx3)">이 기간 소재 데이터 없음</div>';
+  const td=(v,a)=>'<td style="text-align:'+(a||'right')+';padding:6px;border-bottom:1px solid #eef1f8;vertical-align:middle">'+v+'</td>';
+  const body=j.ads.slice(0,40).map(x=>{
+    const img=x.thumb?'<img src="'+esc(x.thumb)+'" loading="lazy" onerror="this.style.display=&#39;none&#39;" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">':'';
+    const cell='<div style="display:flex;align-items:center;gap:9px">'+img+'<span style="line-height:1.35">'+esc(x.name)+'</span></div>';
+    return '<tr>'+td(cell,'left')+td(won(x.spend))+td(won(x.imp))+td(won(x.clk))+td(won(x.cart))+td(won(x.purch))+td(won(x.purchVal))+td('<span class="roas '+cls(x.roas)+'">'+won(x.roas)+'%</span>')+'</tr>';
+  }).join('');
+  const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
+  return '<div style="font-weight:700;font-size:12px;margin-bottom:8px">🎨 '+esc(name)+' — 소재별 ('+j.count+'개)</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+    +h('소재','left')+h('광고비')+h('노출')+h('클릭')+h('장바구니')+h('구매')+h('구매매출')+h('ROAS')
+    +'</tr></thead><tbody>'+body+'</tbody></table>';
+}
+
+// ── 크리테오 탭 (연동 대기 안내) ──
+function renderCriteo(){
+  const el=$('#criteo'); if(!el) return;
+  el.innerHTML='<div class="panel"><h2>크리테오 (연동 대기)</h2><div style="color:var(--tx3);font-size:13px;line-height:1.85">코드는 완성됐고, Criteo 개발자 앱(App ID 25299)을 <b>광고주(Yogibo KR)에 연결(consent)</b>하면 자동 표시됩니다.<br>· 연결은 Criteo 담당자(account manager)에게 요청해야 합니다.<br>· 연동되면: 상품·캠페인별 <b>광고비 / 전환 / 전환매출 / ROAS</b>를 위 통합표와 이 탭에서 함께 보여줍니다.</div></div>';
+}
+
+// ── GFA 수동 입력 (전체 탭) ──
+async function loadGfa(){
+  try{ const j=await (await fetch('/api/gfa')).json(); renderGfa(j&&j.ok?j.data:{}); }catch(_){ renderGfa({}); }
+}
+function renderGfa(data){
+  const el=$('#gfa'); if(!el) return;
+  const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
+  const months=Object.keys(data||{}).sort().reverse();
+  const rows=months.map(m=>{ const e=data[m]||{}; const roas=e.spend?Math.round((e.convValue||0)/e.spend*100):0;
+    return '<tr><td style="text-align:left">'+m+'</td><td>'+won(e.spend||0)+'</td><td>'+won(e.convValue||0)+'</td><td><span class="roas '+cls(roas)+'">'+won(roas)+'%</span></td><td><button class="qb" data-gdel="'+m+'" style="padding:4px 9px;font-size:11px">삭제</button></td></tr>';
+  }).join('');
+  el.innerHTML='<div class="panel"><h2>💠 GFA (성과형 디스플레이) — 엑셀 업로드</h2>'
+    +'<div style="font-size:11.5px;color:var(--tx3);margin-bottom:10px">GFA API는 파트너사 한정 베타라 미연동 상태예요. 네이버 GFA 콘솔에서 <b>월별(또는 일별) 광고비·전환매출</b> 엑셀을 받아 올리면 여기에 ROAS로 표시됩니다.</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><label class="qb" style="cursor:pointer">📑 엑셀(.xlsx) 업로드<input type="file" id="gFile" accept=".xlsx" style="display:none"></label><span id="gStat" style="font-size:11px;color:var(--tx3)"></span></div>'
+    +'<div style="font-size:10.5px;color:var(--tx3);margin-bottom:12px">엑셀 컬럼명에 <b>월</b>(또는 날짜·기간), <b>광고비</b>(비용), <b>전환매출</b>(매출)이 있으면 자동 인식 — 일별이어도 월 단위로 합산됩니다.</div>'
+    +'<table><thead><tr><th style="text-align:left">월</th><th>광고비</th><th>전환매출</th><th>ROAS</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">입력된 GFA 데이터 없음 — 위에서 추가하세요</td></tr>')+'</tbody></table></div>';
+  const gf=$('#gFile'); if(gf) gf.addEventListener('change',async(e)=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const st=$('#gStat'); if(st){ st.textContent='업로드·분석 중…'; st.style.color='var(--tx3)'; }
+    try{
+      const r=await fetch('/api/gfa-upload',{method:'POST',body:f});
+      const j=await r.json(); if(!j.ok) throw new Error(j.error||'실패');
+      renderGfa(j.data||{});
+      const st2=$('#gStat'); if(st2){ st2.textContent='✓ '+(j.added||0)+'개월 반영 ('+(j.months||[]).join(', ')+')'; st2.style.color='var(--ac)'; }
+    }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } }
+  });
+  el.querySelectorAll('[data-gdel]').forEach(b=>b.addEventListener('click',async()=>{ await fetch('/api/gfa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:b.dataset.gdel,delete:true})}); loadGfa(); }));
+}
+
+// ── 📥 캠페인 엑셀 업로드 탭 ──
+let campLoaded=false;
+async function loadCamp(start,end){
+  const qs=(start&&end)?('?start='+start.replace(/-/g,'')+'&end='+end.replace(/-/g,'')):'';
+  $('#camp').innerHTML='<div class="panel"><div class="state" style="padding:30px"><div class="spin"></div>불러오는 중…</div></div>';
+  try{ const j=await (await fetch('/api/campaigns'+qs)).json(); if(!j.ok) throw new Error(j.error||'실패'); renderCamp(j,start,end); }
+  catch(e){ $('#camp').innerHTML='<div class="panel"><div class="err" style="margin:6px 0">조회 실패: '+e.message+'</div></div>'; }
+}
+function renderCamp(j,start,end){
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cls=v=>v>=300?'hi':v>=100?'mid':v>0?'lo':'na';
+  const s=start||j.storedFrom||'', e=end||j.storedTo||'';
+  const RK=[['7','최근7일'],['tm','이번달'],['lm','지난달'],['30','최근30일'],['all','전체']];
+  const rbtns=RK.map(r=>'<button class="qb" data-cr="'+r[0]+'">'+r[1]+'</button>').join('');
+  const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 캠페인 엑셀 업로드 <span style="font-size:12px;color:var(--tx3)">날짜·캠페인별 지표</span></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0 8px"><span style="font-size:12px;color:var(--tx2);font-weight:600">기간</span><input type="date" id="cS" value="'+s+'"><span style="color:var(--tx3)">~</span><input type="date" id="cE" value="'+e+'"><button id="cGo">조회</button>'+rbtns+'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="qb" style="cursor:pointer">📑 엑셀(.xlsx) 업로드<input type="file" id="cFile" accept=".xlsx" style="display:none"></label><span id="cStat" style="font-size:11px;color:var(--tx3)"></span></div>'
+    +'<div class="glossary" style="margin:8px 0 0">컬럼 자동인식: <b>날짜·캠페인명·노출·클릭·광고비·CPC·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. '+(j.storedFrom?('저장된 데이터: <b>'+j.storedFrom+' ~ '+j.storedTo+'</b>'):'아직 업로드된 데이터가 없어요.')+' 같은 날짜·캠페인은 재업로드 시 갱신됩니다.</div></div>';
+  const rows=j.rows||[];
+  const body=rows.length? rows.map(r=>'<tr>'
+    +'<td style="text-align:left">'+esc(r.campaign)+'</td>'
+    +'<td>'+won(r.spend)+'</td><td>'+won(r.imp)+'</td><td>'+won(r.clk)+'</td><td>'+r.ctr+'%</td><td>'+won(r.cpc)+'</td>'
+    +'<td>'+won(r.purch)+'</td><td>'+won(r.purchVal)+'</td><td><span class="roas '+cls(r.purchRoas)+'">'+won(r.purchRoas)+'%</span></td>'
+    +'<td>'+won(r.cart)+'</td><td>'+won(r.cartVal)+'</td></tr>').join('')
+    : '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">이 기간 데이터 없음 — 엑셀을 업로드하세요</td></tr>';
+  const t=j.totals||{};
+  const foot=rows.length? '<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>'+won(t.spend)+'</td><td>'+won(t.imp)+'</td><td>'+won(t.clk)+'</td><td>'+(t.imp?(t.clk/t.imp*100).toFixed(2):0)+'%</td><td>'+(t.clk?won(Math.round(t.spend/t.clk)):0)+'</td><td>'+won(t.purch)+'</td><td>'+won(t.purchVal)+'</td><td>'+(t.spend?won(Math.round(t.purchVal/t.spend*100)):0)+'%</td><td>'+won(t.cart)+'</td><td>'+won(t.cartVal)+'</td></tr></tfoot>':'';
+  const table='<div class="panel"><h2>캠페인별 '+(s?('('+s+' ~ '+e+')'):'(전체)')+' · '+rows.length+'개</h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
+  $('#camp').innerHTML=ctrl+table;
+  $('#cGo').addEventListener('click',()=>{ if($('#cS').value&&$('#cE').value) loadCamp($('#cS').value,$('#cE').value); });
+  $('#camp').querySelectorAll('[data-cr]').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.cr==='all'){ loadCamp(); } else { const x=urRange(b.dataset.cr); loadCamp(x[0],x[1]); } }));
+  const cf=$('#cFile'); if(cf) cf.addEventListener('change',async(ev)=>{
+    const f=ev.target.files&&ev.target.files[0]; if(!f) return;
+    const st=$('#cStat'); if(st){ st.textContent='업로드·분석 중…'; st.style.color='var(--tx3)'; }
+    try{ const r=await fetch('/api/campaigns-upload',{method:'POST',body:f}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
+      if(st){ st.textContent='✓ '+jj.added+'행 반영 ('+jj.from+'~'+jj.to+')'; st.style.color='var(--ac)'; }
+      loadCamp(jj.from,jj.to);
+    }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } }
+  });
+}
+
+// ── 🤖 AI 일일 분석 탭 ──
+let aiLoaded=false;
+function mdToHtml(md){
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline=s=>s.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>');
+  const lines=esc(md).split(/\r?\n/); let html='', inList=false;
+  const closeList=()=>{ if(inList){html+='</ul>';inList=false;} };
+  for(const raw of lines){
+    const line=raw.replace(/\s+$/,''); let m;
+    if((m=/^\s*[-*]\s+(.*)$/.exec(line))){ if(!inList){html+='<ul style="margin:6px 0 8px 2px;padding-left:18px">';inList=true;} html+='<li style="margin:4px 0;line-height:1.6">'+inline(m[1])+'</li>'; continue; }
+    closeList();
+    if((m=/^(#{1,4})\s+(.*)$/.exec(line))){ const sz=[0,17,16,15,14][m[1].length]||14; html+='<div style="font-weight:800;font-size:'+sz+'px;margin:16px 0 6px;letter-spacing:-0.3px;color:var(--tx)">'+inline(m[2])+'</div>'; continue; }
+    if((m=/^\s*>\s?(.*)$/.exec(line))){ html+='<div style="border-left:3px solid var(--bd);padding:7px 11px;margin:8px 0;color:var(--tx2);font-size:12.5px;background:var(--sf2);border-radius:7px">'+inline(m[1])+'</div>'; continue; }
+    if(line.trim()===''){ continue; }
+    html+='<div style="margin:4px 0;line-height:1.65">'+inline(line)+'</div>';
+  }
+  closeList(); return html;
+}
+function aiControls(s,e,focus,resultMode,when,costLine){
+  const esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const RK=[['7','최근7일'],['tm','이번달'],['lm','지난달'],['30','최근30일'],['tdy','오늘']];
+  const curKind=RK.map(r=>r[0]).find(k=>{const x=urRange(k);return x[0]===s&&x[1]===e;});
+  const rbtns=RK.map(r=>'<button class="qb'+(curKind===r[0]?' on':'')+'" data-air="'+r[0]+'">'+r[1]+'</button>').join('');
+  return '<div class="panel" style="margin-bottom:14px"><div class="ct">🤖 AI 기간 분석 <span style="font-size:12px;color:var(--tx3)">기간·필요정보를 정하고 분석하기</span></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:12px 0 8px"><span style="font-size:12px;color:var(--tx2);font-weight:600">기간</span><input type="date" id="aiS" value="'+s+'"><span style="color:var(--tx3)">~</span><input type="date" id="aiE" value="'+e+'"></div>'
+    +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">'+rbtns+'</div>'
+    +'<div style="font-size:12px;color:var(--tx2);font-weight:600;margin-bottom:5px">무엇을 분석할까요? <span style="color:var(--tx3);font-weight:400">(선택 — 비우면 전체 종합)</span></div>'
+    +'<textarea id="aiFocus" placeholder="예: 메타 소재별 효율 / 예산 줄일 곳 / 파워링크 키워드 위주로 / 카카오 플친 성과" style="width:100%;min-height:48px;border:1px solid var(--bd);border-radius:10px;padding:9px 11px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box">'+esc(focus||'')+'</textarea>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button id="aiGo">🔍 분석하기</button>'+(resultMode?'<button class="qb" id="aiRe">🔄 다시(새로 생성)</button>':'')
+    +'<span style="font-size:11px;color:var(--tx3)">'+(when?('생성 '+when+' · '):'')+(costLine||'분석 1회 약 ₩수십~수백, 같은 조건 재방문은 무료')+'</span></div></div>';
+}
+function aiWire(){
+  $('#ai').querySelectorAll('[data-air]').forEach(b=>b.addEventListener('click',()=>{ const x=urRange(b.dataset.air); $('#aiS').value=x[0]; $('#aiE').value=x[1]; $('#ai').querySelectorAll('[data-air]').forEach(o=>o.classList.toggle('on',o===b)); }));
+  const go=$('#aiGo'); if(go) go.addEventListener('click',()=>{ if($('#aiS').value&&$('#aiE').value) loadAi($('#aiS').value,$('#aiE').value,($('#aiFocus').value||'').trim(),false); });
+  const re=$('#aiRe'); if(re) re.addEventListener('click',()=>{ if($('#aiS').value&&$('#aiE').value) loadAi($('#aiS').value,$('#aiE').value,($('#aiFocus').value||'').trim(),true); });
+}
+function renderAiSetup(){
+  const [s,e]=urRange('7');
+  $('#ai').innerHTML=aiControls(s,e,'',false,'','')+'<div class="panel"><div class="state" style="padding:34px;color:var(--tx3);text-align:center">기간과 (필요하면) 보고 싶은 내용을 정한 뒤 <b style="color:var(--ac)">🔍 분석하기</b>를 누르세요.<br><span style="font-size:11px">AI가 그 기간 광고 결과를 평가하고 방향성을 제시합니다.</span></div></div>';
+  aiWire();
+}
+async function loadAi(start, end, focus, force){
+  aiLoaded=true;
+  $('#ai').innerHTML=aiControls(start,end,focus,false,'','')+'<div class="panel"><div class="state" style="padding:40px"><div class="spin"></div>AI가 '+start+' ~ '+end+'를 분석 중… (최초 30~40초, 데이터 수집+분석)</div></div>';
+  aiWire();
+  try{
+    const r=await fetch('/api/ai-analyze?start='+start.replace(/-/g,'')+'&end='+end.replace(/-/g,'')+(focus?'&focus='+encodeURIComponent(focus):'')+(force?'&force=1':''));
+    const j=await r.json(); if(!j.ok) throw new Error(j.error||'실패');
+    renderAi(j, focus);
+  }catch(e){ $('#ai').innerHTML=aiControls(start,end,focus,false,'','')+'<div class="panel"><div class="err" style="margin:6px 0">분석 실패: '+e.message+'</div></div>'; aiWire(); }
+}
+function renderAi(j, focus){
+  const c=j.cost;
+  const costLine = c? ('이번 분석 입력 '+won(c.inputTokens)+'·출력 '+won(c.outputTokens)+' 토큰 · 예상 ₩'+won(c.krw)+' ($'+c.usd+')'+(j.cached?' · 저장본(무료)':'')) : '';
+  let when=''; try{ when=j.generatedAt? new Date(j.generatedAt).toLocaleString('ko-KR'):''; }catch(_){}
+  $('#ai').innerHTML=aiControls(j.start,j.end,(focus!=null?focus:(j.focus||'')),true,when,costLine)+'<div class="panel">'+mdToHtml(j.text||'(내용 없음)')+'</div>';
+  aiWire();
+}
+
+// ── 유입·매출 탭 (Cafe24 Analytics — UTM별 실주문) ──
+let utmLoaded=false;
+function urRange(kind){
+  const f=d=>ymd(d), now=new Date();
+  if(kind==='tdy') return [f(now), f(now)];
+  if(kind==='7'){ const s=new Date(now); s.setDate(s.getDate()-6); return [f(s), f(now)]; }
+  if(kind==='tm') return [f(new Date(now.getFullYear(),now.getMonth(),1)), f(now)];
+  if(kind==='lm') return [f(new Date(now.getFullYear(),now.getMonth()-1,1)), f(new Date(now.getFullYear(),now.getMonth(),0))];
+  const s=new Date(now); s.setDate(s.getDate()-29); return [f(s), f(now)];
+}
+async function loadUtm(start,end){
+  utmLoaded=true;
+  await ensureUtmLabels();
+  $('#utm').innerHTML='<div class="state" style="padding:40px"><div class="spin"></div>Cafe24 유입·매출 불러오는 중… (기간 길면 수십초)</div>';
+  try{
+    const r=await fetch('/api/utm?start='+start+'&end='+end);
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'실패');
+    renderUtm(j);
+  }catch(e){ $('#utm').innerHTML='<div class="err" style="margin:10px 0">유입 조회 실패: '+e.message+'</div>'; }
+}
+function utmTbl(title, sub, headers, rows){
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const h=headers.map((t,i)=>'<th style="text-align:'+(i===0?'left':'right')+'">'+esc(t)+'</th>').join('');
+  const body=rows.length? rows.map(r=>'<tr>'+r.map((c,i)=>'<td style="text-align:'+(i===0?'left':'right')+'">'+esc(c)+'</td>').join('')+'</tr>').join('')
+    : '<tr><td colspan="'+headers.length+'" style="text-align:center;color:var(--muted);padding:14px">데이터 없음</td></tr>';
+  return '<div class="panel"><h2>'+esc(title)+(sub?' <span style="font-size:11px;color:var(--tx3);font-weight:500">'+esc(sub)+'</span>':'')+'</h2><table><thead><tr>'+h+'</tr></thead><tbody>'+body+'</tbody></table></div>';
+}
+const MED_LABEL={Naver:'네이버 (검색·브랜드)',meta:'메타',kakao:'카카오톡',Plusfriendmessage:'카카오 플친',shopping:'네이버 쇼핑',crm:'CRM·알림',paid:'기타 유료','(직접/기타)':'직접·기타'};
+const CAMP_LABEL={main_t:'홈페이지 메인',main_i:'프로모션 메인',sub_1:'25% 할인',sub_2:'쿠폰 적립금',sub_3:'어린이날',sub_4:'리뷰 이벤트',sub_5:'가까운 매장',meta_feed:'메타 피드',message:'플친 메시지','플친전용쿠폰':'플친 전용쿠폰',alimtalk:'알림톡',knowledge_shopping:'네이버 쇼핑검색',kakao_message:'카카오 메시지','파워링크 (자사몰)':'파워링크(자사몰)'};
+const NUM=['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫'];
+const HIDE_MEDIUMS=['paid']; // 정체불명/소액 매체 숨김 (Meta 자동 숫자ID 등) — 더 빼려면 여기에 추가
+const CONTENT_LABEL={memberjoin:'신규가입',mileageAdd:'적립금','카톡챗봇_자사몰':'챗봇·자사몰','카톡챗봇_케어서비스':'챗봇·케어서비스'};
+function sojaeName(u){
+  if(/^\d{6,}$/.test(u.campaign||'')) return '기타 (자동 ID)';
+  let n=CAMP_LABEL[u.campaign]||u.campaign||'(미지정)';
+  let c=(u.content||'').trim();
+  if(CONTENT_LABEL[c]) c=CONTENT_LABEL[c];
+  // 내부 코드성 content(파워링크_브랜드키워드_2305, 5promotion, 숫자, _날짜코드)는 떼고, 의미있는 것만 붙임
+  const cryptic = !c || c==='5promotion' || c==='promotion' || /^\d{6,}$/.test(c) || /_\d{3,}$/.test(c) || /파워링크/.test(c);
+  if(!cryptic) n+=' · '+c;
+  return n;
+}
+// 소재 라벨은 public/utm-labels.json 에서 덮어쓰기(캠페인마다 그 파일만 수정하면 됨)
+let utmLabelsLoaded=false;
+async function ensureUtmLabels(){
+  if(utmLabelsLoaded) return; utmLabelsLoaded=true;
+  try{ const r=await fetch('utm-labels.json?_='+Date.now(),{cache:'no-store'}); if(r.ok){ Object.assign(CAMP_LABEL, await r.json()); } }catch(_){}
+}
+function renderUtm(j){
+  const s=j.sales, pct=(v,t)=>t?Math.round(v/t*100):0, esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const visUtm=s.byUtm.filter(u=>!HIDE_MEDIUMS.includes(u.medium));
+  const tagRev=visUtm.reduce((x,u)=>x+u.revenue,0), tagOrd=visUtm.reduce((x,u)=>x+u.orders,0);
+  // 퀵 기간버튼 active 표시 (현재 조회기간과 일치하는 버튼에 on) — ctrl보다 먼저 선언해야 함
+  const RK=[['tdy','오늘'],['tm','이번달'],['lm','지난달'],['30','최근30일']];
+  const curKind=RK.map(r=>r[0]).find(k=>{const x=urRange(k);return x[0]===j.start&&x[1]===j.end;});
+  const rbtns=RK.map(function(r){return '<button class="qb'+(curKind===r[0]?' on':'')+'" data-ur="'+r[0]+'">'+r[1]+'</button>';}).join('');
+  const ctrl='<div class="panel" style="margin-bottom:14px">'
+    +'<div class="ch" style="border:0;padding:0 0 10px"><div><div class="ct">🔗 유입·매출 보고서 <span style="font-size:12px;color:var(--tx3)">(Cafe24 실주문 기준)</span></div><div class="ch-hint">'+j.start+' ~ '+j.end+' · 매체 → 소재별</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="date" id="uStart" value="'+j.start+'"><span style="color:var(--tx3)">~</span><input type="date" id="uEnd" value="'+j.end+'"><button id="uGo">조회</button>'
+    +rbtns+'</div></div>'
+    +'<div class="glossary" style="margin:0">💡 <b>yogibo.kr 실제 주문·매출</b>을 UTM(매체/캠페인)별로 묶은 값입니다(정산 일치). ※Cafe24가 utm_term(개별 소재)까지는 수집하지 않아, <b>네이버 브랜드검색은 소재별</b>로 보이지만 <b>메타·플친은 캠페인 단위</b>까지만 나뉩니다.</div></div>';
+  const cards='<div class="cards">'
+    +'<div class="card accent"><div class="lbl">UTM 유입 매출</div><div class="val">'+won(tagRev)+'<span style="font-size:14px">원</span></div><div class="sub">UTM 주문 '+won(tagOrd)+'건 · 전체대비 '+pct(tagRev,s.totalRevenue)+'%</div></div>'
+    +'<div class="card"><div class="lbl">전체 매출(기간)</div><div class="val">'+won(s.totalRevenue)+'<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">전체 주문 '+won(s.totalOrders)+'건</div></div>'
+    +'</div>';
+  // 매체별 보고서 섹션 (사용자 리포트 형태)
+  const groups={};
+  for(const u of visUtm){ (groups[u.medium]=groups[u.medium]||[]).push(u); }
+  const medOrder=s.byMedium.map(m=>m.medium).filter(m=>!HIDE_MEDIUMS.includes(m)&&groups[m]);
+  let report='';
+  medOrder.forEach((m,gi)=>{
+    const rows=groups[m].slice().sort((a,b)=>b.revenue-a.revenue);
+    const subOrders=rows.reduce((x,r)=>x+r.orders,0), subRev=rows.reduce((x,r)=>x+r.revenue,0);
+    const body=rows.map(u=>{
+      const aov=u.orders?Math.round(u.revenue/u.orders):0;
+      return '<tr><td style="text-align:left"><b>'+esc(sojaeName(u))+'</b></td>'
+        +'<td style="text-align:left;color:var(--tx3);font-size:11px">'+esc(u.campaign)+'</td>'
+        +'<td>'+won(u.orders)+'</td><td>'+won(u.revenue)+'원</td><td>'+won(aov)+'원</td>'
+        +'<td>'+pct(u.revenue,subRev)+'%</td></tr>';
+    }).join('');
+    report+='<div class="panel"><h2>'+(NUM[gi]||'•')+' '+esc(MED_LABEL[m]||m)+' <span style="font-size:12px;color:var(--tx3);font-weight:600">— 주문 '+won(subOrders)+'건 · 매출 '+won(subRev)+'원</span></h2>'
+      +'<table><thead><tr><th style="text-align:left">소재</th><th style="text-align:left">campaign 코드</th><th>주문</th><th>매출</th><th>객단가</th><th>매체내 비중</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  });
+  if(!report) report='<div class="panel"><div style="color:var(--tx3);padding:14px">이 기간에 UTM 태그된 주문이 없습니다.</div></div>';
+  // 원본(상세) 접기
+  let raw='';
+  if(j.adsales&&j.adsales.rows.length) raw+=utmTbl('소스(ad)별 방문·주문·매출','Cafe24 visitpaths (직접/none 포함)', ['소스','방문','주문','매출'], j.adsales.rows.map(a=>[a.ad, won(a.visits), won(a.orders), won(a.revenue)+'원']));
+  if(j.effect&&j.effect.rows&&j.effect.rows.length) raw+=utmTbl('검색 키워드별 효과','방문·전환율·매출 상위 30', ['키워드','소스','방문','구매','전환율','매출'], j.effect.rows.slice(0,30).map(e=>[e.keyword||'-',e.ad||'-',won(e.visit),won(e.purchase),e.cvr.toFixed(1)+'%',won(e.revenue)+'원']));
+  raw+=utmTbl('UTM 조합 원본','source / medium / campaign / content', ['source','medium','campaign','content','주문','매출'], visUtm.map(u=>[u.ad,u.medium,u.campaign,u.content||'-',won(u.orders),won(u.revenue)+'원']));
+  const details='<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--tx3);font-size:12px;padding:8px 4px">🔧 원본 데이터 (소스별·검색키워드·UTM 조합 원본) 펼치기</summary><div style="margin-top:8px">'+raw+'</div></details>';
+  const kwroasBlock='<div id="kwroas"><div class="panel"><h2>🔑 파워링크 키워드 진짜 ROAS</h2>'
+    +'<div style="font-size:11.5px;color:var(--tx3);margin-bottom:10px">네이버 광고비 × Cafe24 실매출(파워링크 직접전환)을 키워드로 매칭해 보여줍니다. 계산에 최대 1분 정도 걸려요.</div>'
+    +'<button id="kwroasBtn">이 기간 키워드 ROAS 계산하기</button></div></div>';
+  $('#utm').innerHTML=ctrl+cards+report+kwroasBlock+details;
+  $('#uGo').addEventListener('click',()=>{ if($('#uStart').value&&$('#uEnd').value) loadUtm($('#uStart').value,$('#uEnd').value); });
+  $('#utm').querySelectorAll('[data-ur]').forEach(b=>b.addEventListener('click',()=>{ const [a,z]=urRange(b.dataset.ur); loadUtm(a,z); }));
+  const kb=$('#kwroasBtn'); if(kb) kb.addEventListener('click',()=>loadKwRoas(j.start,j.end));
+}
+async function loadKwRoas(start,end){
+  const el=$('#kwroas'); if(!el) return;
+  el.innerHTML='<div class="panel"><h2>🔑 파워링크 키워드 진짜 ROAS</h2><div class="state" style="padding:24px"><div class="spin"></div>네이버 광고비 × Cafe24 실매출 계산 중… (최대 1분)</div></div>';
+  try{
+    const r=await fetch('/api/keyword-roas?start='+start+'&end='+end);
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'실패');
+    renderKwRoas(j);
+  }catch(e){ el.innerHTML='<div class="panel"><h2>🔑 파워링크 키워드 진짜 ROAS</h2><div class="err">조회 실패: '+e.message+'</div></div>'; }
+}
+function renderKwRoas(j){
+  const el=$('#kwroas'); if(!el) return;
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
+  const rows=j.rows.slice(0,40);
+  const body=rows.length? rows.map(r=>'<tr>'
+    +'<td style="text-align:left">'+esc(r.keyword)+'</td>'
+    +'<td>'+won(r.cost)+'</td><td>'+won(r.clk)+'</td>'
+    +'<td>'+won(r.nvConvAmt)+'</td><td><span class="roas '+cls(r.nvRoas)+'">'+won(r.nvRoas)+'%</span></td>'
+    +'<td>'+(r.caRev?won(r.caRev):'<span style="color:var(--tx3)">-</span>')+'</td>'
+    +'<td>'+(r.caRev?'<span class="roas '+cls(r.caRoas)+'">'+won(r.caRoas)+'%</span>':'<span style="color:var(--tx3)">-</span>')+'</td>'
+    +'</tr>').join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px">노출 발생 키워드 없음</td></tr>';
+  const t=j.totals;
+  el.innerHTML='<div class="panel"><h2>🔑 파워링크 키워드 진짜 ROAS <span style="font-size:12px;color:var(--tx3);font-weight:600">— '+j.start+'~'+j.end+' · 광고비순 상위 '+rows.length+'/'+j.count+'</span></h2>'
+    +'<div class="glossary" style="margin:0 0 10px">💡 <b>네이버 전환매출</b>=네이버 자체 집계 · <b>Cafe24 SA매출</b>=파워링크 클릭이 쇼핑몰에서 직접 만든 주문(정산기준). 어트리뷰션이 달라 차이날 수 있어요(다른 채널로 전환되면 SA매출 0). 샐리필 제외, 요기보 파워링크 '+j.campaignCount+'개 캠페인 합산.</div>'
+    +'<table><thead><tr><th style="text-align:left">키워드</th><th>광고비</th><th>클릭</th><th>네이버 전환매출</th><th>ROAS(네이버)</th><th>Cafe24 SA매출</th><th>ROAS(SA)</th></tr></thead>'
+    +'<tbody>'+body+'</tbody>'
+    +'<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계(전체 '+j.count+'개)</td><td>'+won(t.cost)+'</td><td></td><td>'+won(t.nvConvAmt)+'</td><td>'+won(t.cost?Math.round(t.nvConvAmt/t.cost*100):0)+'%</td><td>'+won(t.caRev)+'</td><td>'+won(t.cost?Math.round(t.caRev/t.cost*100):0)+'%</td></tr></tfoot>'
+    +'</table></div>';
+}
+
+let sortKey='salesAmt', sortDir=-1, lastRows=[];
+
+async function load(){
+  const date = dateEl.value.replace(/-/g,'');
+  $('#go').disabled=true;
+  $('#platforms').innerHTML='<div class="state" style="padding:24px"><div class="spin"></div>전 플랫폼 조회 중…</div>';
+  content.innerHTML='<div class="state"><div class="spin"></div>네이버 API 조회 중…</div>';
+  try{
+    const [sum, j] = await Promise.all([
+      fetch('/api/summary?date='+date).then(r=>r.json()).catch(e=>({ok:false,error:String(e)})),
+      fetch('/api/stats?date='+date).then(r=>r.json()),
+    ]);
+    lastSum = (sum && sum.ok) ? sum : null;
+    lastStat = j;
+    if(sum && sum.ok) renderPlatforms(sum); else $('#platforms').innerHTML='';
+    if(!j.ok) throw new Error(j.error + (j.detail? ' · '+JSON.stringify(j.detail):''));
+    $('#acct').textContent = '광고계정 '+j.customerId+' · '+date.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
+    render(j);
+    $('#updated').textContent = '갱신 '+new Date().toLocaleTimeString('ko-KR');
+  }catch(e){
+    content.innerHTML = '<div class="err">조회 실패: '+e.message+'</div>';
+  }finally{ $('#go').disabled=false; }
+}
+
+function renderPlatforms(d){
+  const rows=d.rows||[];
+  const roas=(s,r)=> s? Math.round(r/s*100):0;
+  const bal=v=> v==null? '<span style="color:#9aa3ad">–</span>' : won(v);
+  const sum=rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),conv:a.conv+(r.conversions||0),rev:a.rev+(r.convValue||0),bal:a.bal+(r.balance||0)}),{spend:0,conv:0,rev:0,bal:0});
+  const tr=r=>`<tr><td><b>${r.platform}</b>${r.note?` <span style="font-size:11px;color:#9aa3ad">${r.note}</span>`:''}</td>
+    <td>${won(r.spend)}</td><td>${won(r.conversions)}</td><td>${won(r.convValue)}</td>
+    <td><span class="roas ${r.spend>0&&roas(r.spend,r.convValue)>=300?'hi':(r.spend>0?'mid':'na')}">${won(roas(r.spend,r.convValue))}%</span></td>
+    <td>${bal(r.balance)}</td></tr>`;
+  const disabled=(d.disabled||[]).length? `<div style="font-size:12px;color:var(--muted);margin-top:10px">⏳ 미연동(자격증명 대기): <b>${d.disabled.join(', ')}</b></div>`:'';
+  const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
+  $('#platforms').innerHTML=`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 잔액</h2>
+    <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th>잔액</th></tr></thead>
+    <tbody>${rows.map(tr).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
+    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td>${won(sum.bal)}</td></tr>
+    </tbody></table>${disabled}${errs}</div>`;
+}
+
+function roasClass(r,cost){ if(cost>0&&r===0)return 'na'; if(r>=300)return 'hi'; if(r>=100)return 'mid'; if(cost>0)return 'lo'; return 'na'; }
+
+function render(j){
+  const t=j.totals;
+  lastRows = j.rows.filter(r=>r.impCnt>0).map(r=>({...r, cvr: r.clkCnt? r.ccnt/r.clkCnt*100:0, cpa: r.ccnt? Math.round(r.salesAmt/r.ccnt):0}));
+
+  content.innerHTML = `
+    <div class="cards">
+      <div class="card accent"><div class="lbl">💰 비즈머니 잔액</div><div class="val">${won(j.bizmoney? j.bizmoney.bizmoney:0)}<span style="font-size:14px">원</span></div><div class="sub">${j.bizmoney&&j.bizmoney.budgetLock?'⚠️ 예산잠금 상태':'네이버 광고 잔액'}</div></div>
+      <div class="card"><div class="lbl">광고비 (소진)</div><div class="val">${won(t.salesAmt)}<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">노출발생 ${t.activeCount} / 전체 ${t.totalCount}개</div></div>
+      <div class="card"><div class="lbl">전환매출</div><div class="val">${won(t.convAmt)}<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">전환 ${won(t.ccnt)}건</div></div>
+      <div class="card"><div class="lbl">ROAS</div><div class="val" style="color:var(--green-d)">${won(t.ror)}%</div><div class="sub">전환매출 ÷ 광고비</div></div>
+      <div class="card"><div class="lbl">노출</div><div class="val">${won(t.impCnt)}</div><div class="sub">CTR ${t.ctr}%</div></div>
+      <div class="card"><div class="lbl">클릭</div><div class="val">${won(t.clkCnt)}</div><div class="sub">CPC ${won(t.cpc)}원</div></div>
+      <div class="card"><div class="lbl">전환수</div><div class="val">${won(t.ccnt)}</div><div class="sub">전환당 ${won(t.ccnt? Math.round(t.salesAmt/t.ccnt):0)}원</div></div>
+    </div>
+
+    <div class="glossary"><b>📖 용어</b> &nbsp;·&nbsp; <b>CTR</b> 클릭률(클릭÷노출) &nbsp;·&nbsp; <b>CPC</b> 클릭당 비용 &nbsp;·&nbsp; <b>전환</b> 구매·장바구니 등 성과 &nbsp;·&nbsp; <b>전환율(CVR)</b> 전환÷클릭 &nbsp;·&nbsp; <b>전환당비용(CPA)</b> 광고비÷전환(낮을수록 좋음) &nbsp;·&nbsp; <b>ROAS</b> 광고비 대비 매출(높을수록 좋음, 300%↑ 우수)</div>
+
+    <div class="panel"><h2>캠페인별 광고비 · 전환매출</h2><div class="chart-box"><canvas id="chart"></canvas></div></div>
+
+    <div class="panel">
+      <h2>캠페인 상세 (노출 발생 ${lastRows.length}개 · 헤더 클릭 정렬)</h2>
+      <table>
+        <thead><tr>
+          <th data-k="name">캠페인</th>
+          <th data-k="salesAmt">광고비</th>
+          <th data-k="impCnt">노출</th>
+          <th data-k="clkCnt">클릭</th>
+          <th data-k="ctr">CTR</th>
+          <th data-k="cpc">CPC</th>
+          <th data-k="ccnt">전환</th>
+          <th data-k="cvr">전환율</th>
+          <th data-k="convAmt">전환매출</th>
+          <th data-k="cpa">전환당비용</th>
+          <th data-k="ror">ROAS</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>`;
+
+  document.querySelectorAll('th[data-k]').forEach(th=>th.addEventListener('click',()=>{
+    const k=th.dataset.k;
+    if(sortKey===k) sortDir*=-1; else { sortKey=k; sortDir = k==='name'?1:-1; }
+    drawTable();
+  }));
+  drawTable();
+  drawChart();
+}
+
+function drawTable(){
+  const rows=[...lastRows].sort((a,b)=>{
+    const x=a[sortKey], y=b[sortKey];
+    if(typeof x==='string') return x.localeCompare(y)*sortDir;
+    return (x-y)*sortDir;
+  });
+  document.querySelectorAll('th[data-k]').forEach(th=>th.classList.toggle('sorted',th.dataset.k===sortKey));
+  $('#tbody').innerHTML = rows.map(r=>`
+    <tr class="camp-row" data-id="${r.id||''}" data-name="${(r.name||'').replace(/"/g,'&quot;')}" data-tp="${r.tp||''}" style="cursor:pointer">
+      <td><span class="badge ${r.tp}">${r.tp}</span>${r.name} <span style="color:var(--ac);font-size:10px">▸${r.tp==='SHOPPING'?'상품':'그룹'}</span></td>
+      <td>${won(r.salesAmt)}</td>
+      <td>${won(r.impCnt)}</td>
+      <td>${won(r.clkCnt)}</td>
+      <td>${r.ctr}%</td>
+      <td>${won(r.cpc)}</td>
+      <td>${won(r.ccnt)}</td>
+      <td>${(r.cvr||0).toFixed(1)}%</td>
+      <td>${won(r.convAmt)}</td>
+      <td>${r.ccnt? won(r.cpa):'-'}</td>
+      <td><span class="roas ${roasClass(r.ror,r.salesAmt)}">${won(Math.round(r.ror))}%</span></td>
+    </tr>`).join('');
+}
+
+function drawChart(){
+  if(typeof Chart==='undefined') return;
+  const rows=[...lastRows].sort((a,b)=>b.salesAmt-a.salesAmt);
+  const labels=rows.map(r=>r.name.length>14? r.name.slice(0,13)+'…':r.name);
+  if(chart) chart.destroy();
+  chart=new Chart($('#chart'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'광고비',data:rows.map(r=>r.salesAmt),backgroundColor:'#cbd5e1',borderRadius:5},
+      {label:'전환매출',data:rows.map(r=>r.convAmt),backgroundColor:'#03C75A',borderRadius:5},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top'},tooltip:{callbacks:{label:c=>c.dataset.label+': '+won(c.raw)+'원'}}},
+      scales:{y:{ticks:{callback:v=>won(v)}}}}
+  });
+}
+
+// ── 키워드 효율 드릴다운 (캠페인 행 클릭) ──
+content.addEventListener('click', (e)=>{
+  if(!e.target.closest) return;
+  const ag = e.target.closest('.ag-row');
+  if(ag && content.contains(ag)){ toggleAgKw(ag); return; }
+  const tr = e.target.closest('.camp-row');
+  if(tr && content.contains(tr)) toggleKeywords(tr);
+});
+// 캠페인 → (쇼핑이면 상품 / 그 외 광고그룹)
+async function toggleKeywords(tr){
+  const id=tr.dataset.id, name=tr.dataset.name||'', tp=tr.dataset.tp||'';
+  if(!id) return;
+  const nx=tr.nextElementSibling;
+  if(nx && nx.classList.contains('kw-detail')){ nx.remove(); return; }
+  const det=document.createElement('tr'); det.className='kw-detail';
+  det.innerHTML='<td colspan="12" style="background:var(--sf2);padding:12px 16px"><div class="state" style="padding:14px"><div class="spin"></div>광고그룹 불러오는 중…</div></td>';
+  tr.after(det);
+  const date=dateEl.value.replace(/-/g,'');
+  try{
+    const r=await fetch('/api/adgroups?campaign='+encodeURIComponent(id)+'&date='+date);
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'실패');
+    det.firstChild.innerHTML = agTable(j,name,tp);
+  }catch(e){ det.firstChild.innerHTML='<div style="color:#c2362f">조회 실패: '+e.message+'</div>'; }
+}
+// 광고그룹 → (쇼핑이면 상품 / 그 외 키워드) — 계층 2단계
+async function toggleAgKw(ag){
+  const id=ag.dataset.agid, name=ag.dataset.agname||'', tp=ag.dataset.tp||'';
+  if(!id) return;
+  const nx=ag.nextElementSibling;
+  if(nx && nx.classList.contains('ag-kw')){ nx.remove(); return; }
+  const isShop = tp==='SHOPPING';
+  const det=document.createElement('tr'); det.className='ag-kw';
+  det.innerHTML='<td colspan="12" style="background:#fff;padding:8px 8px 10px 22px"><div class="state" style="padding:10px"><div class="spin"></div>'+(isShop?'상품':'키워드')+' 불러오는 중…</div></td>';
+  ag.after(det);
+  const date=dateEl.value.replace(/-/g,'');
+  const ep = isShop ? '/api/products' : '/api/keywords';
+  try{
+    const r=await fetch(ep+'?adgroup='+encodeURIComponent(id)+'&date='+date);
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'실패');
+    det.firstChild.innerHTML = isShop ? prodTable(j,name) : kwTable(j,name);
+  }catch(e){ det.firstChild.innerHTML='<div style="color:#c2362f">'+(isShop?'상품':'키워드')+' 조회 실패: '+e.message+'</div>'; }
+}
+function agStatus(s){ return s==='ELIGIBLE'?'<span style="color:#1B64DA">운영중</span>':s==='PAUSED'?'<span style="color:#8B95A1">중지</span>':'<span style="color:#8B95A1">'+(s||'-')+'</span>'; }
+function agTable(j,name,tp){
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if(!j.rows.length) return '<div style="color:var(--tx3)">광고그룹이 없습니다</div>';
+  const isShop = tp==='SHOPPING';
+  const hint = isShop ? '▸상품' : '▸키워드';
+  const td=(v,a)=>'<td style="text-align:'+(a||'right')+';padding:6px;border-bottom:1px solid #eef1f8;vertical-align:middle">'+v+'</td>';
+  const body=j.rows.map(g=>{
+    const url=esc(g.channel).replace(/^https?:\/\//,'');
+    const ctr=g.ctr!=null?g.ctr:(g.impCnt?(g.clkCnt/g.impCnt*100).toFixed(2):0);
+    const nameCell='<span>'+esc(g.name)+'</span> <span style="color:var(--ac);font-size:10px">'+hint+'</span>';
+    return '<tr class="ag-row" data-agid="'+esc(g.adgroupId)+'" data-agname="'+esc(g.name)+'" data-tp="'+esc(tp||'')+'" style="cursor:pointer">'
+      +td(nameCell,'left')+td(agStatus(g.status),'left')+td(won(g.bidAmt)+'원')+td(url?'<span style="color:var(--tx3)">'+url+'</span>':'-','left')
+      +td(won(g.salesAmt))+td(won(g.impCnt))+td(won(g.clkCnt))+td(ctr+'%')+td(g.ccnt)+td('<span class="roas '+kwClass({ror:g.ror,salesAmt:g.salesAmt,ccnt:g.ccnt})+'">'+won(Math.round(g.ror))+'%</span>')
+      +'</tr>';
+  }).join('');
+  const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
+  return '<div style="font-weight:700;font-size:12px;margin-bottom:3px">📂 '+esc(name)+' — 광고그룹별 ('+j.count+'개)</div>'+
+    '<div style="font-size:10.5px;color:var(--tx3);margin-bottom:8px">💡 그룹 클릭 → 그 그룹의 '+(isShop?'상품':'키워드')+' 펼침. 입찰가=클릭당 최대금액 · 연결=클릭 시 가는 페이지</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'+
+    h('광고그룹','left')+h('상태','left')+h('입찰가')+h('연결','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('전환')+h('ROAS')+
+    '</tr></thead><tbody>'+body+'</tbody></table>';
+}
+function kwClass(k){ if(k.ror>=300) return 'hi'; if(k.salesAmt>0&&k.ccnt>0) return 'mid'; if(k.salesAmt>0) return 'lo'; return 'na'; }
+function kwTable(j,name){
+  if(!j.rows.length) return '<div style="color:var(--tx3)">노출 발생 키워드 없음 (쇼핑/브랜드형은 키워드 구조가 다를 수 있음)</div>';
+  const top=j.rows.slice(0,30);
+  const td=(v,a)=>'<td style="text-align:'+(a||'right')+';padding:5px 6px;border-bottom:1px solid #eef1f8">'+v+'</td>';
+  const body=top.map(k=>{
+    const cvr=k.clkCnt? (k.ccnt/k.clkCnt*100):0;
+    const cpa=k.ccnt? Math.round(k.salesAmt/k.ccnt):0;
+    return '<tr>'+td(k.keyword,'left')+td(won(k.salesAmt))+td(won(k.impCnt))+td(won(k.clkCnt))+td(k.ctr+'%')+td(won(k.cpc))+td(k.ccnt)+td(cvr.toFixed(1)+'%')+td(k.ccnt?won(cpa):'-')+td('<span class="roas '+kwClass(k)+'">'+won(Math.round(k.ror))+'%</span>')+td(k.avgRnk||'-')+'</tr>';
+  }).join('');
+  const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
+  const note=j.activeCount>30?('<div style="font-size:10px;color:var(--tx3);margin-top:6px">노출발생 '+j.activeCount+'개 중 광고비 상위 30개'+(j.truncated?' · ※키워드 매우 많아 일부만 조회':'')+'</div>'):'';
+  return '<div style="font-weight:700;font-size:11px;margin-bottom:8px">🔑 '+name+' — 키워드 효율 (광고비순, 노출발생 '+j.activeCount+'개)</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'+
+    h('키워드','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('CPC')+h('전환')+h('전환율')+h('전환당비용')+h('ROAS')+h('순위')+
+    '</tr></thead><tbody>'+body+'</tbody></table>'+note;
+}
+function prodTable(j,name){
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if(!j.rows.length) return '<div style="color:var(--tx3)">이 날짜에 노출 발생한 상품이 없습니다</div>';
+  const top=j.rows.slice(0,30);
+  const td=(v,a)=>'<td style="text-align:'+(a||'right')+';padding:6px;border-bottom:1px solid #eef1f8;vertical-align:middle">'+v+'</td>';
+  const body=top.map(p=>{
+    const img=p.image?'<img src="'+esc(p.image)+'" loading="lazy" onerror="this.style.display=&#39;none&#39;" style="width:36px;height:36px;border-radius:8px;object-fit:cover;flex:none">':'';
+    const cell='<div style="display:flex;align-items:center;gap:9px">'+img+'<span style="line-height:1.35">'+esc(p.product)+'</span></div>';
+    const ctr=p.ctr!=null?p.ctr:(p.impCnt?(p.clkCnt/p.impCnt*100).toFixed(2):0);
+    const cvr=p.clkCnt? (p.ccnt/p.clkCnt*100):0;
+    const cpa=p.ccnt? Math.round(p.salesAmt/p.ccnt):0;
+    return '<tr>'+td(cell,'left')+td(won(p.salesAmt))+td(won(p.impCnt))+td(won(p.clkCnt))+td(ctr+'%')+td(p.ccnt)+td(cvr.toFixed(1)+'%')+td(won(p.convAmt))+td(p.ccnt?won(cpa):'-')+td('<span class="roas '+kwClass({ror:p.ror,salesAmt:p.salesAmt,ccnt:p.ccnt})+'">'+won(Math.round(p.ror))+'%</span>')+'</tr>';
+  }).join('');
+  const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
+  const note=j.activeCount>30?('<div style="font-size:10px;color:var(--tx3);margin-top:6px">노출발생 '+j.activeCount+'개 상품 중 광고비 상위 30개'+(j.truncated?' · ※상품 많아 일부만':'')+'</div>'):'';
+  return '<div style="font-weight:700;font-size:12px;margin-bottom:3px">🛍️ '+esc(name)+' — 상품별 효율 (노출발생 '+j.activeCount+'개)</div>'+
+    '<div style="font-size:10.5px;color:var(--tx3);margin-bottom:8px">💡 ROAS(광고비 대비 매출)가 높을수록 효자 상품이에요. 클릭은 나는데 전환매출 0이면 점검 대상.</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'+
+    h('상품','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('전환')+h('전환율')+h('전환매출')+h('전환당비용')+h('ROAS')+
+    '</tr></thead><tbody>'+body+'</tbody></table>'+note;
+}
+
+// ── 일자별 추이 (MongoDB) ──
+let trendChart=null, trendMetric='spend', trendData=null;
+const TREND_LABELS={spend:'광고비',convValue:'전환매출',roas:'ROAS(%)',conv:'전환수',clk:'클릭',imp:'노출'};
+async function loadTrend(days){
+  $('#trend').innerHTML='<div class="panel"><div class="state" style="padding:30px"><div class="spin"></div>추이 불러오는 중…</div></div>';
+  let q='';
+  if(days&&days>0){ const u=new Date(), s=new Date(); s.setDate(s.getDate()-days); q='?since='+ymd(s).replace(/-/g,'')+'&until='+ymd(u).replace(/-/g,''); }
+  try{
+    const r=await fetch('/api/trend'+q); const j=await r.json();
+    if(!j.ok) throw new Error(j.error);
+    if(!j.dates.length){ $('#trend').innerHTML='<div class="panel"><h2>📈 일자별 추이</h2><div style="color:var(--tx3);padding:14px;font-size:13px">아직 적재된 데이터가 없습니다.<br>→ 터미널에서 <b>node backfill.js</b> 실행 시 과거 21개월치가 채워집니다.</div></div>'; return; }
+    trendData=j; renderTrend();
+  }catch(e){ $('#trend').innerHTML='<div class="panel"><h2>📈 일자별 추이</h2><div style="color:var(--tx3);padding:14px;font-size:13px">데이터 없음: '+e.message+'<br>→ <b>node backfill.js</b> 로 적재 필요.</div></div>'; }
+}
+function renderTrend(){
+  const j=trendData; if(!j) return;
+  const f=d=>d.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
+  const mbtn=Object.entries(TREND_LABELS).map(([k,v])=>'<button class="qb '+(k===trendMetric?'on':'')+'" data-m="'+k+'">'+v+'</button>').join('');
+  const rbtn=[[30,'30일'],[90,'90일'],[365,'1년'],[0,'전체']].map(([d,l])=>'<button class="qb" data-days="'+d+'">'+l+'</button>').join('');
+  $('#trend').innerHTML='<div class="panel">'
+    +'<div class="ch" style="border:0;padding:0 0 10px"><div><div class="ct">📈 일자별 추이</div><div class="ch-hint">'+f(j.dates[0])+' ~ '+f(j.dates[j.dates.length-1])+' · '+j.dates.length+'일</div></div><div style="display:flex;gap:5px;flex-wrap:wrap">'+rbtn+'</div></div>'
+    +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'+mbtn+'</div>'
+    +'<div style="position:relative;height:300px"><canvas id="trendCanvas"></canvas></div></div>';
+  $('#trend').querySelectorAll('[data-m]').forEach(b=>b.addEventListener('click',()=>{trendMetric=b.dataset.m; renderTrend();}));
+  $('#trend').querySelectorAll('[data-days]').forEach(b=>b.addEventListener('click',()=>loadTrend(+b.dataset.days)));
+  drawTrend();
+}
+function drawTrend(){
+  if(typeof Chart==='undefined'||!trendData) return;
+  if(trendChart) trendChart.destroy();
+  const data=trendData.series[trendMetric]||[];
+  const color=trendMetric==='convValue'?'#059669':(trendMetric==='roas'?'#7c3aed':'#2563eb');
+  trendChart=new Chart($('#trendCanvas'),{type:'line',
+    data:{labels:trendData.dates.map(d=>d.slice(4,6)+'/'+d.slice(6,8)),datasets:[{label:TREND_LABELS[trendMetric],data,borderColor:color,backgroundColor:color+'14',fill:true,tension:.25,pointRadius:0,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>TREND_LABELS[trendMetric]+': '+won(c.raw)+(trendMetric==='roas'?'%':'')}}},
+      scales:{x:{ticks:{maxTicksLimit:14,font:{size:9},color:'#7e8fae'},grid:{display:false}},y:{ticks:{callback:v=>won(v),font:{size:9},color:'#7e8fae'}}}}});
+}
+</script>
+</body>
+</html>

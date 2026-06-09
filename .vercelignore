@@ -1,0 +1,7 @@
+.env
+.env.local
+node_modules
+.next
+.git
+reports
+_naver_kw.json
