@@ -115,13 +115,19 @@
   </header>
 
   <div class="controls">
-    <input type="date" id="date" />
-    <button id="go">조회</button>
-    <div class="quick">
-      <button data-d="0">오늘</button>
-      <button data-d="1">어제</button>
-      <button data-d="7">7일전</button>
+    <input type="date" id="date" style="display:none" />
+    <div class="quick" id="periodBtns">
+      <button data-p="tdy">오늘</button>
+      <button data-p="yst">어제</button>
+      <button data-p="7">최근 7일</button>
+      <button data-p="tm">이번 달</button>
+      <button data-p="lm">지난 달</button>
     </div>
+    <span style="font-size:12px;color:var(--tx2);font-weight:600;margin-left:4px">기간 설정</span>
+    <input type="date" id="pStart" title="시작일" />
+    <span style="color:var(--tx3)">~</span>
+    <input type="date" id="pEnd" title="종료일" />
+    <button id="pGo">조회</button>
     <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;margin-left:auto">
       <input type="checkbox" id="auto"> 60초 자동갱신</label>
     <span id="updated" class="acct" style="margin-left:0"></span>
@@ -188,21 +194,47 @@ const dateEl = $('#date'), content = $('#content');
 let chart;
 let lastSum=null, lastStat=null;
 
+// ── 전역 기간 컨트롤 (상단 1개로 통일) ──
+let gStart, gEnd, tabPeriod={};
+function periodKey(){ return gStart+'_'+gEnd; }
+function activeTab(){ const b=document.querySelector('.tab.on'); return b? b.dataset.tab : 'all'; }
+function presetRange(p){
+  if(p==='tdy'){ const t=ymd(new Date()); return [t,t]; }
+  if(p==='yst'){ const d=new Date(); d.setDate(d.getDate()-1); const t=ymd(d); return [t,t]; }
+  return urRange(p); // 7 / tm / lm
+}
+function loadTab(t){
+  if(t==='all'||t==='naver'){ load(); tabPeriod['all']=tabPeriod['naver']=periodKey(); return; }
+  if(t==='utm') loadUtm(gStart,gEnd);
+  else if(t==='meta') loadMeta(gStart,gEnd);
+  else if(t==='camp') loadCamp(gStart,gEnd);
+  else if(t==='ai') renderAiSetup();
+  tabPeriod[t]=periodKey();
+}
+function reloadActive(){ tabPeriod={}; loadTab(activeTab()); }
+function setPeriod(start,end,opts){
+  gStart=start; gEnd=end;
+  if(dateEl) dateEl.value=end;                 // 단일일자 탭(전체·네이버·드릴다운) 동기화
+  const ps=$('#pStart'), pe=$('#pEnd'); if(ps) ps.value=start; if(pe) pe.value=end;
+  document.querySelectorAll('#periodBtns button').forEach(b=>{ const r=presetRange(b.dataset.p); b.classList.toggle('on', r[0]===start&&r[1]===end); });
+  if(!(opts&&opts.silent)) reloadActive();
+}
+
 // 기본값: 어제
 function ymd(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
 (function init(){
-  dateEl.value=ymd(new Date()); dateEl.max=ymd(new Date());
-  load();
+  const t=ymd(new Date());
+  const ps=$('#pStart'), pe=$('#pEnd'); if(ps) ps.max=t; if(pe) pe.max=t;
+  setPeriod(t,t,{silent:true});   // 기본: 오늘
+  loadTab('all');                 // 전체+네이버
   loadTrend(90);
   renderCriteo();
   renderKakao();
   loadGfa();
 })();
 
-$('#go').addEventListener('click', load);
-document.querySelectorAll('.quick button').forEach(b=>b.addEventListener('click',()=>{
-  const d=new Date(); d.setDate(d.getDate()-Number(b.dataset.d)); dateEl.value=ymd(d); load();
-}));
+document.querySelectorAll('#periodBtns button').forEach(b=>b.addEventListener('click',()=>{ const r=presetRange(b.dataset.p); setPeriod(r[0],r[1]); }));
+$('#pGo').addEventListener('click',()=>{ if($('#pStart').value&&$('#pEnd').value) setPeriod($('#pStart').value,$('#pEnd').value); });
 let timer=null;
 $('#auto').addEventListener('change',e=>{
   clearInterval(timer); timer=null;
@@ -214,13 +246,10 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   const t=b.dataset.tab;
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('.tabpane').forEach(p=>{ p.hidden = p.dataset.pane!==t; });
-  // 숨김 상태에서 그려진 차트 크기 보정
   if(t==='naver' && chart) try{ chart.resize(); }catch(_){}
   if(t==='all' && trendChart) try{ trendChart.resize(); }catch(_){}
-  if(t==='utm' && !utmLoaded){ const [a,z]=urRange('tdy'); loadUtm(a,z); }
-  if(t==='meta' && !metaLoaded){ const [a,z]=urRange('tdy'); loadMeta(a,z); }
-  if(t==='ai' && !aiLoaded){ aiLoaded=true; renderAiSetup(); }
-  if(t==='camp' && !campLoaded){ campLoaded=true; loadCamp(); }
+  // 상단 글로벌 기간으로 (아직 그 기간으로 안 불러온 탭만) 로드
+  if(t!=='criteo' && t!=='kakao' && tabPeriod[t]!==periodKey()) loadTab(t);
 }));
 // META 캠페인행 클릭 → 소재 드릴다운 (위임)
 $('#meta').addEventListener('click',(e)=>{ const tr=e.target.closest&&e.target.closest('.meta-camp-row'); if(tr && $('#meta').contains(tr)) toggleMetaAds(tr); });
@@ -249,12 +278,9 @@ function renderMetaTab(j){
   metaStart=j.start; metaEnd=j.end;
   const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const RK=[['tdy','오늘'],['tm','이번달'],['lm','지난달'],['30','최근30일']];
-  const curKind=RK.map(r=>r[0]).find(k=>{const x=urRange(k);return x[0]===j.start&&x[1]===j.end;});
-  const rbtns=RK.map(r=>'<button class="qb'+(curKind===r[0]?' on':'')+'" data-mr="'+r[0]+'">'+r[1]+'</button>').join('');
   let html='<div class="panel" style="margin-bottom:14px"><div class="ch" style="border:0;padding:0 0 10px">'
     +'<div><div class="ct">META 광고 성과 <span style="font-size:12px;color:var(--tx3)">(요기보·샐리필)</span></div><div class="ch-hint">'+j.start+' ~ '+j.end+' · 캠페인 → 소재별</div></div>'
-    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="date" id="mStart" value="'+j.start+'"><span style="color:var(--tx3)">~</span><input type="date" id="mEnd" value="'+j.end+'"><button id="mGo">조회</button>'+rbtns+'</div></div>'
+    +'<span style="font-size:11px;color:var(--tx3)">기간은 상단에서 변경</span></div>'
     +'<div class="glossary" style="margin:0">💡 <b>장바구니</b>=담기(add_to_cart) · <b>구매</b>=실결제(purchase) · <b>ROAS</b>=구매매출÷광고비. 캠페인 행을 클릭하면 소재(광고)별로 펼쳐지고, <b>썸네일을 클릭하면 큰 이미지</b>로 볼 수 있어요. 전환은 Meta 자체 집계예요.</div>'
     +'<div class="glossary" style="margin:6px 0 0">📛 <b>캠페인명 읽는 법</b> &nbsp;·&nbsp; 목표: <b>전환</b>=구매·장바구니 / <b>트래픽</b>=클릭·방문 유도 / <b>인지도·브랜딩</b>=노출·도달 &nbsp;·&nbsp; 타겟: <b>타겟</b>=관심사·연령 등으로 좁힘 / <b>논타겟</b>=Meta 알고리즘에 맡긴 광범위 &nbsp;·&nbsp; <b>단일</b>=소재 1개 / <b>상시</b>=프로모션 없이 항상 운영 &nbsp;·&nbsp; <b>(조회/클릭)</b>=최적화 기준(랜딩 조회 vs 링크 클릭)</div></div>';
   for(const a of j.accounts){
@@ -274,8 +300,7 @@ function renderMetaTab(j){
       +'<table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>장바구니</th><th>구매</th><th>구매매출</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
   }
   $('#meta').innerHTML=html;
-  $('#mGo').addEventListener('click',()=>{ if($('#mStart').value&&$('#mEnd').value) loadMeta($('#mStart').value,$('#mEnd').value); });
-  $('#meta').querySelectorAll('[data-mr]').forEach(b=>b.addEventListener('click',()=>{ const [a,z]=urRange(b.dataset.mr); loadMeta(a,z); }));
+  // 기간 컨트롤은 상단 통합바로 일원화
 }
 async function toggleMetaAds(tr){
   const acct=tr.dataset.acct, camp=tr.dataset.camp, name=tr.dataset.name||'';
@@ -361,10 +386,8 @@ function renderCamp(j,start,end){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const cls=v=>v>=300?'hi':v>=100?'mid':v>0?'lo':'na';
   const s=start||j.storedFrom||'', e=end||j.storedTo||'';
-  const RK=[['7','최근7일'],['tm','이번달'],['lm','지난달'],['30','최근30일'],['all','전체']];
-  const rbtns=RK.map(r=>'<button class="qb" data-cr="'+r[0]+'">'+r[1]+'</button>').join('');
-  const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 GFA · 캠페인 엑셀 업로드 <span style="font-size:12px;color:var(--tx3)">날짜·캠페인별 지표</span></div>'
-    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:10px 0 8px"><span style="font-size:12px;color:var(--tx2);font-weight:600">기간</span><input type="date" id="cS" value="'+s+'"><span style="color:var(--tx3)">~</span><input type="date" id="cE" value="'+e+'"><button id="cGo">조회</button>'+rbtns+'</div>'
+  const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 GFA · 캠페인 엑셀 업로드 <span style="font-size:12px;color:var(--tx3)">날짜·캠페인별 지표 · 기간은 상단에서</span></div>'
+    +'<div style="font-size:11px;color:var(--tx3);margin:8px 0">조회 기간: <b>'+(s?(s+' ~ '+e):'전체')+'</b></div>'
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="qb" style="cursor:pointer">📑 엑셀(.xlsx) 업로드<input type="file" id="cFile" accept=".xlsx" style="display:none"></label><span id="cStat" style="font-size:11px;color:var(--tx3)"></span></div>'
     +'<div class="glossary" style="margin:8px 0 0">컬럼 자동인식: <b>날짜·캠페인명·노출·클릭·광고비·CPC·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. '+(j.storedFrom?('저장된 데이터: <b>'+j.storedFrom+' ~ '+j.storedTo+'</b>'):'아직 업로드된 데이터가 없어요.')+' 같은 날짜·캠페인은 재업로드 시 갱신됩니다.</div></div>';
   const rows=j.rows||[];
@@ -378,8 +401,7 @@ function renderCamp(j,start,end){
   const foot=rows.length? '<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>'+won(t.spend)+'</td><td>'+won(t.imp)+'</td><td>'+won(t.clk)+'</td><td>'+(t.imp?(t.clk/t.imp*100).toFixed(2):0)+'%</td><td>'+(t.clk?won(Math.round(t.spend/t.clk)):0)+'</td><td>'+won(t.purch)+'</td><td>'+won(t.purchVal)+'</td><td>'+(t.spend?won(Math.round(t.purchVal/t.spend*100)):0)+'%</td><td>'+won(t.cart)+'</td><td>'+won(t.cartVal)+'</td></tr></tfoot>':'';
   const table='<div class="panel"><h2>캠페인별 '+(s?('('+s+' ~ '+e+')'):'(전체)')+' · '+rows.length+'개</h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
   $('#camp').innerHTML=ctrl+table;
-  $('#cGo').addEventListener('click',()=>{ if($('#cS').value&&$('#cE').value) loadCamp($('#cS').value,$('#cE').value); });
-  $('#camp').querySelectorAll('[data-cr]').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.cr==='all'){ loadCamp(); } else { const x=urRange(b.dataset.cr); loadCamp(x[0],x[1]); } }));
+  // 기간 컨트롤은 상단 통합바로 일원화
   const cf=$('#cFile'); if(cf) cf.addEventListener('change',async(ev)=>{
     const f=ev.target.files&&ev.target.files[0]; if(!f) return;
     const st=$('#cStat'); if(st){ st.textContent='업로드·분석 중…'; st.style.color='var(--tx3)'; }
@@ -427,7 +449,7 @@ function aiWire(){
   const re=$('#aiRe'); if(re) re.addEventListener('click',()=>{ if($('#aiS').value&&$('#aiE').value) loadAi($('#aiS').value,$('#aiE').value,($('#aiFocus').value||'').trim(),true); });
 }
 function renderAiSetup(){
-  const [s,e]=urRange('7');
+  const s=gStart||urRange('7')[0], e=gEnd||urRange('7')[1];
   $('#ai').innerHTML=aiControls(s,e,'',false,'','')+'<div class="panel"><div class="state" style="padding:34px;color:var(--tx3);text-align:center">기간과 (필요하면) 보고 싶은 내용을 정한 뒤 <b style="color:var(--ac)">🔍 분석하기</b>를 누르세요.<br><span style="font-size:11px">AI가 그 기간 광고 결과를 평가하고 방향성을 제시합니다.</span></div></div>';
   aiWire();
 }
@@ -502,14 +524,9 @@ function renderUtm(j){
   const s=j.sales, pct=(v,t)=>t?Math.round(v/t*100):0, esc=x=>String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const visUtm=s.byUtm.filter(u=>!HIDE_MEDIUMS.includes(u.medium));
   const tagRev=visUtm.reduce((x,u)=>x+u.revenue,0), tagOrd=visUtm.reduce((x,u)=>x+u.orders,0);
-  // 퀵 기간버튼 active 표시 (현재 조회기간과 일치하는 버튼에 on) — ctrl보다 먼저 선언해야 함
-  const RK=[['tdy','오늘'],['tm','이번달'],['lm','지난달'],['30','최근30일']];
-  const curKind=RK.map(r=>r[0]).find(k=>{const x=urRange(k);return x[0]===j.start&&x[1]===j.end;});
-  const rbtns=RK.map(function(r){return '<button class="qb'+(curKind===r[0]?' on':'')+'" data-ur="'+r[0]+'">'+r[1]+'</button>';}).join('');
   const ctrl='<div class="panel" style="margin-bottom:14px">'
     +'<div class="ch" style="border:0;padding:0 0 10px"><div><div class="ct">🔗 유입·매출 보고서 <span style="font-size:12px;color:var(--tx3)">(Cafe24 실주문 기준)</span></div><div class="ch-hint">'+j.start+' ~ '+j.end+' · 매체 → 소재별</div></div>'
-    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="date" id="uStart" value="'+j.start+'"><span style="color:var(--tx3)">~</span><input type="date" id="uEnd" value="'+j.end+'"><button id="uGo">조회</button>'
-    +rbtns+'</div></div>'
+    +'<span style="font-size:11px;color:var(--tx3)">기간은 상단에서 변경</span></div>'
     +'<div class="glossary" style="margin:0">💡 <b>yogibo.kr 실제 주문·매출</b>을 UTM(매체/캠페인)별로 묶은 값입니다(정산 일치). ※Cafe24가 utm_term(개별 소재)까지는 수집하지 않아, <b>네이버 브랜드검색은 소재별</b>로 보이지만 <b>메타·플친은 캠페인 단위</b>까지만 나뉩니다.</div></div>';
   const cards='<div class="cards">'
     +'<div class="card accent"><div class="lbl">UTM 유입 매출</div><div class="val">'+won(tagRev)+'<span style="font-size:14px">원</span></div><div class="sub">UTM 주문 '+won(tagOrd)+'건 · 전체대비 '+pct(tagRev,s.totalRevenue)+'%</div></div>'
@@ -544,8 +561,7 @@ function renderUtm(j){
     +'<div style="font-size:11.5px;color:var(--tx3);margin-bottom:10px">네이버 광고비 × Cafe24 실매출(파워링크 직접전환)을 키워드로 매칭해 보여줍니다. 계산에 최대 1분 정도 걸려요.</div>'
     +'<button id="kwroasBtn">이 기간 키워드 ROAS 계산하기</button></div></div>';
   $('#utm').innerHTML=ctrl+cards+report+kwroasBlock+details;
-  $('#uGo').addEventListener('click',()=>{ if($('#uStart').value&&$('#uEnd').value) loadUtm($('#uStart').value,$('#uEnd').value); });
-  $('#utm').querySelectorAll('[data-ur]').forEach(b=>b.addEventListener('click',()=>{ const [a,z]=urRange(b.dataset.ur); loadUtm(a,z); }));
+  // 기간 컨트롤은 상단 통합바로 일원화 (탭내 컨트롤 제거)
   const kb=$('#kwroasBtn'); if(kb) kb.addEventListener('click',()=>loadKwRoas(j.start,j.end));
 }
 async function loadKwRoas(start,end){
@@ -583,7 +599,7 @@ let sortKey='salesAmt', sortDir=-1, lastRows=[];
 
 async function load(){
   const date = dateEl.value.replace(/-/g,'');
-  $('#go').disabled=true;
+  const _gb=$('#pGo'); if(_gb) _gb.disabled=true;
   $('#platforms').innerHTML='<div class="state" style="padding:24px"><div class="spin"></div>전 플랫폼 조회 중…</div>';
   content.innerHTML='<div class="state"><div class="spin"></div>네이버 API 조회 중…</div>';
   try{
@@ -597,10 +613,11 @@ async function load(){
     if(!j.ok) throw new Error(j.error + (j.detail? ' · '+JSON.stringify(j.detail):''));
     $('#acct').textContent = '광고계정 '+j.customerId+' · '+date.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
     render(j);
+    if(gStart!==gEnd){ const note='<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">📅 <b>전체·네이버</b> 탭은 하루 단위라 선택 기간의 <b>마지막 날('+gEnd+')</b> 기준이에요. 기간 비교는 META·유입·GFA 탭에서 보세요.</div>'; content.insertAdjacentHTML('afterbegin',note); const pf=$('#platforms'); if(pf) pf.insertAdjacentHTML('afterbegin',note); }
     $('#updated').textContent = '갱신 '+new Date().toLocaleTimeString('ko-KR');
   }catch(e){
     content.innerHTML = '<div class="err">조회 실패: '+e.message+'</div>';
-  }finally{ $('#go').disabled=false; }
+  }finally{ const _gb=$('#pGo'); if(_gb) _gb.disabled=false; }
 }
 
 function renderPlatforms(d){
