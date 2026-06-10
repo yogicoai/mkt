@@ -370,7 +370,7 @@ function renderMetaTab(j){
       +'<td>'+won(c.spend)+'</td><td>'+won(c.imp)+'</td><td>'+won(c.clk)+'</td><td>'+c.ctr+'%</td>'
       +'<td>'+won(c.cart)+'</td><td>'+won(c.purch)+'</td><td>'+won(c.purchVal)+'</td>'
       +'<td><span class="roas '+cls(c.roas)+'">'+won(c.roas)+'%</span></td></tr>').join('')
-      : '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:14px">이 기간 데이터 없음</td></tr>';
+      : '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:14px">이 기간 데이터 없음 — 상단에서 <b>기간</b>을 넓혀보세요 (예: 이번 달 · 최근 7일)</td></tr>';
     html+='<div class="panel"><h2>'+esc(a.platform)+'</h2>'+cards
       +'<table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>장바구니</th><th>구매</th><th>구매매출</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
   }
