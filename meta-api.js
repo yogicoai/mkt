@@ -90,10 +90,10 @@ async function getMetaAds(account, campaign, start, end) {
       const thumbs = {};
       for (let i = 0; i < ids.length; i += 50) {
         const batch = ids.slice(i, i + 50);
-        const j = await mget(`?ids=${batch.join(',')}&fields=creative{thumbnail_url}`);
-        for (const k of Object.keys(j)) { const c = j[k] && j[k].creative; if (c && c.thumbnail_url) thumbs[k] = c.thumbnail_url; }
+        const j = await mget(`?ids=${batch.join(',')}&fields=creative{thumbnail_url,image_url}`);
+        for (const k of Object.keys(j)) { const c = j[k] && j[k].creative; if (c && (c.thumbnail_url || c.image_url)) thumbs[k] = { thumb: c.thumbnail_url || c.image_url, image: c.image_url || c.thumbnail_url }; }
       }
-      ads = ads.map((a) => ({ ...a, thumb: thumbs[a.id] || '' }));
+      ads = ads.map((a) => ({ ...a, thumb: (thumbs[a.id] || {}).thumb || '', image: (thumbs[a.id] || {}).image || '' }));
     } catch (_) { /* 썸네일 실패 무시 */ }
   }
   return { account: id, campaign: String(campaign), start: ymd(start), end: ymd(end), count: ads.length, ads };

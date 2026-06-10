@@ -52,6 +52,12 @@
   .tab:hover{color:var(--tx2);background:none;transform:none}
   .tab.on{color:var(--ac);border-bottom-color:var(--ac)}
   .tabpane[hidden]{display:none}
+  #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;padding:24px}
+  #lightbox.on{display:flex}
+  #lightbox img{max-width:92vw;max-height:90vh;min-width:240px;border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.5);background:#fff;object-fit:contain}
+  #lightbox .lb-x{position:fixed;top:14px;right:22px;color:#fff;font-size:30px;line-height:1;cursor:pointer;opacity:.85}
+  .meta-thumb{cursor:zoom-in;transition:transform .1s}
+  .meta-thumb:hover{transform:scale(1.08)}
   .glossary{background:var(--sf2);border-radius:14px;padding:12px 16px;margin-bottom:16px;font-size:11.5px;color:var(--tx2);line-height:1.9}
   .glossary b{color:var(--tx)}
 
@@ -173,6 +179,8 @@
   </div>
 </div>
 
+<div id="lightbox"><span class="lb-x">✕</span><img alt="소재 미리보기"></div>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const won = (n) => Number(n||0).toLocaleString('ko-KR');
@@ -216,6 +224,15 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
 }));
 // META 캠페인행 클릭 → 소재 드릴다운 (위임)
 $('#meta').addEventListener('click',(e)=>{ const tr=e.target.closest&&e.target.closest('.meta-camp-row'); if(tr && $('#meta').contains(tr)) toggleMetaAds(tr); });
+// META 소재 썸네일 클릭 → 라이트박스(큰 이미지)
+(function(){ const lb=$('#lightbox'); if(!lb) return; const lbImg=lb.querySelector('img');
+  document.addEventListener('click',(e)=>{
+    const im=e.target.closest&&e.target.closest('.meta-thumb');
+    if(im){ const f=im.getAttribute('data-full')||im.src; if(f){ lbImg.src=f; lb.classList.add('on'); } return; }
+    if(e.target.closest&&e.target.closest('#lightbox')){ lb.classList.remove('on'); lbImg.removeAttribute('src'); }
+  });
+  document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'&&lb.classList.contains('on')){ lb.classList.remove('on'); lbImg.removeAttribute('src'); } });
+})();
 
 // ── META 탭 (캠페인 → 소재 드릴다운, 기간 기반) ──
 let metaLoaded=false, metaStart=null, metaEnd=null;
@@ -238,7 +255,8 @@ function renderMetaTab(j){
   let html='<div class="panel" style="margin-bottom:14px"><div class="ch" style="border:0;padding:0 0 10px">'
     +'<div><div class="ct">META 광고 성과 <span style="font-size:12px;color:var(--tx3)">(요기보·샐리필)</span></div><div class="ch-hint">'+j.start+' ~ '+j.end+' · 캠페인 → 소재별</div></div>'
     +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="date" id="mStart" value="'+j.start+'"><span style="color:var(--tx3)">~</span><input type="date" id="mEnd" value="'+j.end+'"><button id="mGo">조회</button>'+rbtns+'</div></div>'
-    +'<div class="glossary" style="margin:0">💡 <b>장바구니</b>=담기(add_to_cart) · <b>구매</b>=실결제(purchase) · <b>ROAS</b>=구매매출÷광고비. 캠페인 행을 클릭하면 소재(광고)별로 펼쳐집니다(썸네일 포함). 전환은 Meta 자체 집계예요.</div></div>';
+    +'<div class="glossary" style="margin:0">💡 <b>장바구니</b>=담기(add_to_cart) · <b>구매</b>=실결제(purchase) · <b>ROAS</b>=구매매출÷광고비. 캠페인 행을 클릭하면 소재(광고)별로 펼쳐지고, <b>썸네일을 클릭하면 큰 이미지</b>로 볼 수 있어요. 전환은 Meta 자체 집계예요.</div>'
+    +'<div class="glossary" style="margin:6px 0 0">📛 <b>캠페인명 읽는 법</b> &nbsp;·&nbsp; 목표: <b>전환</b>=구매·장바구니 / <b>트래픽</b>=클릭·방문 유도 / <b>인지도·브랜딩</b>=노출·도달 &nbsp;·&nbsp; 타겟: <b>타겟</b>=관심사·연령 등으로 좁힘 / <b>논타겟</b>=Meta 알고리즘에 맡긴 광범위 &nbsp;·&nbsp; <b>단일</b>=소재 1개 / <b>상시</b>=프로모션 없이 항상 운영 &nbsp;·&nbsp; <b>(조회/클릭)</b>=최적화 기준(랜딩 조회 vs 링크 클릭)</div></div>';
   for(const a of j.accounts){
     const t=a.totals;
     const cards='<div class="cards">'
@@ -278,7 +296,8 @@ function metaAdTable(j,name){
   if(!j.ads.length) return '<div style="color:var(--tx3)">이 기간 소재 데이터 없음</div>';
   const td=(v,a)=>'<td style="text-align:'+(a||'right')+';padding:6px;border-bottom:1px solid #eef1f8;vertical-align:middle">'+v+'</td>';
   const body=j.ads.slice(0,40).map(x=>{
-    const img=x.thumb?'<img src="'+esc(x.thumb)+'" loading="lazy" onerror="this.style.display=&#39;none&#39;" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none">':'';
+    const full=esc(x.image||x.thumb);
+    const img=x.thumb?'<img src="'+esc(x.thumb)+'" data-full="'+full+'" class="meta-thumb" loading="lazy" onerror="this.style.display=&#39;none&#39;" style="width:42px;height:42px;border-radius:8px;object-fit:cover;flex:none" title="클릭하면 크게 보기">':'';
     const cell='<div style="display:flex;align-items:center;gap:9px">'+img+'<span style="line-height:1.35">'+esc(x.name)+'</span></div>';
     return '<tr>'+td(cell,'left')+td(won(x.spend))+td(won(x.imp))+td(won(x.clk))+td(won(x.cart))+td(won(x.purch))+td(won(x.purchVal))+td('<span class="roas '+cls(x.roas)+'">'+won(x.roas)+'%</span>')+'</tr>';
   }).join('');
