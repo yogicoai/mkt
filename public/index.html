@@ -114,6 +114,65 @@
     <span class="acct" id="acct"></span>
   </header>
 
+  <details id="help" open class="panel" style="margin:0 0 14px">
+    <summary style="cursor:pointer;font-weight:800;font-size:15px">📖 사용설명서 <span style="font-size:11px;font-weight:500;color:var(--tx3)">— 클릭해서 접기/펴기</span></summary>
+    <div style="font-size:12.5px;line-height:1.7;color:var(--tx2);margin-top:10px">
+      <div style="font-weight:700;color:var(--tx);margin:10px 0 3px">① 기간 고르기 (맨 위 버튼)</div>
+      <b>오늘·어제</b>는 그 하루, <b>최근7일·이번달·지난달</b>은 그 기간, <b>기간 설정</b>은 직접 날짜 범위를 정해요. 고르면 <b>모든 탭</b>이 그 기간으로 바뀝니다. <span style="color:var(--tx3)">(전체·네이버 탭은 '하루' 기준이라, 여러 날을 고르면 마지막 날만 표시돼요.)</span>
+
+      <div style="font-weight:700;color:var(--tx);margin:14px 0 3px">② 탭별로 보는 것</div>
+      <ul style="margin:4px 0;padding-left:18px">
+        <li><b>📊 전체</b> — 모든 매체를 한 표로(광고비·전환매출·ROAS) + 광고 잔액 + 일자별 추이 그래프</li>
+        <li><b>🔗 유입·매출</b> — 쇼핑몰(yogibo.kr)의 <b>실제 주문·매출</b>을 광고 매체별로 (정산 기준 진짜 매출)</li>
+        <li><b>네이버</b> — 검색광고 캠페인별 성과. 행을 <b>클릭</b>하면 광고그룹 → 키워드까지 펼쳐져요</li>
+        <li><b>META</b> — 인스타·페북 캠페인별. 행 클릭 → 소재별, <b>썸네일 클릭 → 실제 광고 이미지 크게</b></li>
+        <li><b>카카오 · 크리테오</b> — 연동 대기 중</li>
+        <li><b>📥 GFA</b> — 엑셀(.xlsx)을 올리면 날짜·캠페인별로 정리해서 보여줘요</li>
+        <li><b>🤖 AI 분석</b> — 기간을 정하면 AI가 그 기간 광고 성과를 평가하고 개선 방향을 제시</li>
+      </ul>
+
+      <div style="font-weight:700;color:var(--tx);margin:14px 0 3px">③ 자주 나오는 용어 (쉽게)</div>
+      <ul style="margin:4px 0;padding-left:18px">
+        <li><b>광고비</b> 쓴 돈 · <b>노출</b> 광고가 보인 횟수 · <b>클릭</b> 눌린 횟수</li>
+        <li><b>CTR</b> 클릭÷노출(관심도) · <b>CPC</b> 클릭 1번에 든 비용</li>
+        <li><b>구매 / 구매매출</b> 실제 결제 건수 / 결제 금액</li>
+        <li><b>구매 ROAS</b> 광고비 대비 매출 — 예: <b>500%</b>면 광고비 1원이 매출 5원. 높을수록 좋고 <b>300% 이상이면 우수</b></li>
+        <li><b>🛒 장바구니</b> 담기(아직 안 산 것) — 실매출 아님, 참고용으로 따로 표시</li>
+      </ul>
+
+      <div style="font-weight:700;color:var(--tx);margin:14px 0 3px">④ 팁</div>
+      표의 <b>캠페인·광고그룹 행을 클릭</b>하면 더 자세히 펼쳐지고, <b>META 소재 썸네일을 클릭</b>하면 실제 이미지가 크게 떠요. 숫자가 비어 보이면 위에서 <b>기간</b>을 바꿔보세요.
+
+      <div style="font-weight:700;color:var(--tx);margin:16px 0 3px">⑤ 🤖 AI 분석 — 분석자료로 활용하기</div>
+      <div style="background:var(--sf2);border:1px solid var(--bd);border-radius:10px;padding:11px 13px;margin-top:4px">
+        AI가 선택한 <b>기간의 모든 광고 데이터</b>(네이버·META·Cafe24 실매출·파워링크 키워드·비즈머니 잔액)를 모아 <b>성과 평가와 개선 방향</b>을 글로 정리해줘요. 그대로 <b>주간보고·회의 자료</b>로 쓸 수 있습니다.
+        <div style="font-weight:700;color:var(--tx);margin:10px 0 2px">쓰는 순서</div>
+        <ol style="margin:2px 0;padding-left:18px">
+          <li>맨 위에서 <b>기간</b> 선택 (예: 지난주·이번달)</li>
+          <li>AI 분석 탭의 <b>"무엇을 분석할까요?"</b> 칸에 보고 싶은 내용 입력 <span style="color:var(--tx3)">(비우면 전체 종합)</span></li>
+          <li><b>🔍 분석하기</b> 클릭 → 잠시 후 결과</li>
+        </ol>
+        <div style="font-weight:700;color:var(--tx);margin:10px 0 2px">이렇게 물어보면 좋아요 (예시)</div>
+        <ul style="margin:2px 0;padding-left:18px">
+          <li>"메타 소재별로 뭐가 잘됐고 뭘 끄는 게 좋을까"</li>
+          <li>"광고비를 줄여도 되는 곳을 찾아줘"</li>
+          <li>"파워링크 키워드 위주로 ROAS 점검해줘"</li>
+          <li>"카카오 플친 성과는 어때?"</li>
+          <li>"지난주 대비 개선점과 다음 주에 할 액션"</li>
+        </ul>
+        <div style="font-weight:700;color:var(--tx);margin:10px 0 2px">결과 구성</div>
+        총평 → 잘된 곳 → 점검할 곳 → 🧭 방향성 → <b>바로 할 액션 3가지</b>
+        <div style="font-weight:700;color:var(--tx);margin:10px 0 2px">비용·캐시 (걱정 마세요)</div>
+        <ul style="margin:2px 0;padding-left:18px">
+          <li>1회 약 <b>₩수십~수백</b> — 화면에 토큰·예상비용이 표시돼요</li>
+          <li><b>같은 기간 + 같은 질문</b>은 다시 봐도 <b>무료</b>(저장됨). 새로 만들려면 <b>🔄 다시</b></li>
+          <li>팁: 기간이 길수록 비용↑ · 질문을 <b>구체적으로</b> 쓸수록 더 쓸모있는 답이 나와요</li>
+        </ul>
+        <div style="margin-top:8px;color:var(--tx3)">💡 광고 매체가 보고하는 ROAS가 아니라 <b>Cafe24 실매출 기준</b>으로 평가하므로, "광고가 진짜 매출을 만들었나"를 현실적으로 판단할 수 있어요.</div>
+      </div>
+    </div>
+  </details>
+
   <div class="controls">
     <input type="date" id="date" style="display:none" />
     <div class="quick" id="periodBtns">
@@ -235,6 +294,8 @@ function ymd(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-
 
 document.querySelectorAll('#periodBtns button').forEach(b=>b.addEventListener('click',()=>{ const r=presetRange(b.dataset.p); setPeriod(r[0],r[1]); }));
 $('#pGo').addEventListener('click',()=>{ if($('#pStart').value&&$('#pEnd').value) setPeriod($('#pStart').value,$('#pEnd').value); });
+// 사용설명서 접힘 상태 기억(브라우저별)
+(function(){ const h=$('#help'); if(!h) return; try{ if(localStorage.getItem('helpClosed')==='1') h.removeAttribute('open'); }catch(_){} h.addEventListener('toggle',()=>{ try{ localStorage.setItem('helpClosed', h.open?'0':'1'); }catch(_){} }); })();
 let timer=null;
 $('#auto').addEventListener('change',e=>{
   clearInterval(timer); timer=null;
