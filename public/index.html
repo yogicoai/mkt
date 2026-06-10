@@ -43,9 +43,9 @@
   button:active{transform:scale(.97)}
   button:disabled{opacity:.45;cursor:wait}
   .quick{display:flex;gap:6px}
-  .quick button,.qb{background:var(--sf2);color:var(--tx2);border:0;font-weight:600;padding:11px 14px;border-radius:12px;font-size:13px;letter-spacing:-0.3px}
-  .quick button:hover,.qb:hover{background:#E5E8EB}
-  .qb.on{background:var(--ac);color:#fff}
+  .quick button,.qb{background:var(--sf2);color:var(--tx2);border:1px solid var(--bd);font-weight:600;padding:10px 15px;border-radius:10px;font-size:13px;letter-spacing:-0.3px;transition:.12s}
+  .quick button:hover,.qb:hover{background:#E5E8EB;border-color:#C4CAD2}
+  .qb.on,.quick button.on{background:var(--ac);color:#fff;border-color:var(--ac);box-shadow:0 1px 5px rgba(0,0,0,.15)}
   label{font-size:13px;color:var(--tx3);font-weight:500}
   .tabs{display:flex;gap:2px;margin-bottom:18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
   .tab{background:none;border:0;border-bottom:2.5px solid transparent;border-radius:0;padding:11px 20px;font-weight:700;font-size:14.5px;color:var(--tx3);cursor:pointer;letter-spacing:-0.4px;transition:.12s}
