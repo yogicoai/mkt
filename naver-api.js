@@ -158,13 +158,13 @@ async function getBizmoney() {
   return { bizmoney: Math.floor(+d.bizmoney || 0), budgetLock: !!d.budgetLock, refundLock: !!d.refundLock };
 }
 
-// 장바구니(add_to_cart) 전환만 분리 — StatReport AD_CONVERSION 보고서
-// 컬럼(헤더없는 TSV): [10]전환유형(문자열) [11]전환수 [12]전환매출
-const CART_TTL = 10 * 60 * 1000; // 전환데이터는 자주 안 변하므로 10분 캐시
-const _cartCache = new Map();
-const _cartInflight = new Map();
+// 전환 분해 — StatReport AD_CONVERSION 보고서. 캠페인별로 구매(purchase)/장바구니(add_to_cart) 분리.
+// 컬럼(헤더없는 TSV): [2]캠페인ID [3]광고그룹ID [4]키워드ID [10]전환유형 [11]전환수 [12]전환매출
+const CONV_TTL = 10 * 60 * 1000; // 전환데이터는 자주 안 변하므로 10분 캐시
+const _convCache = new Map();
+const _convInflight = new Map();
 
-async function _computeCart(date) {
+async function _computeConv(date) {
   const job = await api('POST', '/stat-reports', { body: { reportTp: 'AD_CONVERSION', statDt: date } });
   let info = job, status = job.status, tries = 0;
   while (['REGIST', 'RUNNING', 'WAITING', 'AGGREGATING'].includes(status) && tries < 40) {
@@ -172,29 +172,41 @@ async function _computeCart(date) {
     info = await api('GET', `/stat-reports/${job.reportJobId}`);
     status = info.status; tries++;
   }
-  if (status !== 'BUILT') return { conversions: null, convValue: null, status };
+  if (status !== 'BUILT') return { status, byCampaign: null, totals: null };
   const res = await fetch(info.downloadUrl, { headers: authHeaders('GET', new URL(info.downloadUrl).pathname) });
   const tsv = await res.text();
-  let cnt = 0, amt = 0;
+  const byCampaign = {};
+  const totals = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
   for (const line of tsv.split(/\r?\n/)) {
     if (!line) continue;
-    const c = line.split('\t');
-    if (c[10] === 'add_to_cart') { cnt += +c[11] || 0; amt += +c[12] || 0; }
+    const a = line.split('\t');
+    const camp = a[2], type = a[10], cnt = +a[11] || 0, val = +a[12] || 0;
+    const o = byCampaign[camp] || (byCampaign[camp] = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 });
+    if (type === 'purchase') { o.buyCnt += cnt; o.buyVal += val; totals.buyCnt += cnt; totals.buyVal += val; }
+    else if (type === 'add_to_cart') { o.cartCnt += cnt; o.cartVal += val; totals.cartCnt += cnt; totals.cartVal += val; }
   }
-  return { conversions: cnt, convValue: amt, status: 'BUILT' };
+  return { status: 'BUILT', byCampaign, totals };
 }
 
-async function getCartConversions(date) {
-  const hit = _cartCache.get(date);
-  if (hit && Date.now() - hit.at < CART_TTL) return hit.data;
-  if (_cartInflight.has(date)) return _cartInflight.get(date);
-  const p = _computeCart(date);
-  _cartInflight.set(date, p);
+// 캠페인별 구매/장바구니 분해 (10분 캐시). 미완료(BUILT 전)는 캐시 안 함.
+async function getConversionBreakdown(date) {
+  const hit = _convCache.get(date);
+  if (hit && Date.now() - hit.at < CONV_TTL) return hit.data;
+  if (_convInflight.has(date)) return _convInflight.get(date);
+  const p = _computeConv(date);
+  _convInflight.set(date, p);
   try {
     const d = await p;
-    if (d.conversions != null) _cartCache.set(date, { at: Date.now(), data: d }); // 미완료(null)는 캐시 안 함
+    if (d.byCampaign) _convCache.set(date, { at: Date.now(), data: d });
     return d;
-  } finally { _cartInflight.delete(date); }
+  } finally { _convInflight.delete(date); }
+}
+
+// 장바구니 전환(통합표용) — 위 분해에서 파생 (기존 시그니처 유지: conversions=장바구니수, convValue=장바구니매출)
+async function getCartConversions(date) {
+  const d = await getConversionBreakdown(date);
+  if (!d.totals) return { conversions: null, convValue: null, status: d.status };
+  return { conversions: d.totals.cartCnt, convValue: d.totals.cartVal, status: 'BUILT' };
 }
 
 // 캠페인의 키워드별 효율 (adgroups→keywords→/stats). ids는 콤마구분.
@@ -459,5 +471,5 @@ function yesterday() {
 
 module.exports = {
   BASE, CUSTOMER, FIELDS,
-  missingEnv, authHeaders, api, getCampaigns, getCampaignStats, getBizmoney, getCartConversions, getKeywordStats, getPowerlinkKeywordsRange, getNaverBucketRange, normKw, getProductStats, getProductStatsForAdgroup, getAdgroupStats, getKeywordStatsForAdgroup, yesterday, dash,
+  missingEnv, authHeaders, api, getCampaigns, getCampaignStats, getBizmoney, getCartConversions, getConversionBreakdown, getKeywordStats, getPowerlinkKeywordsRange, getNaverBucketRange, normKw, getProductStats, getProductStatsForAdgroup, getAdgroupStats, getKeywordStatsForAdgroup, yesterday, dash,
 };

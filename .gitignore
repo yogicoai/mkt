@@ -15,3 +15,7 @@ ai-daily.json
 uploaded-campaigns.json
 _naver_kw.json
 *.log
+
+# 검토용 보고서/임시 (매출 데이터 — 커밋 금지)
+*.xlsx
+_dump.js

@@ -198,15 +198,26 @@ export async function GET(req) {
       return J({ ok: true, ...data });
     }
 
-    // ── 네이버 캠페인 효율(상세) ──
+    // ── 네이버 캠페인 효율(상세) + 구매/장바구니 분해 ──
     if (p === '/api/stats') {
       const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
       if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
-      const [data, biz] = await Promise.all([
+      const [data, biz, conv] = await Promise.all([
         naver.getCampaignStats(date),
         naver.getBizmoney().catch(() => null),
+        naver.getConversionBreakdown(date).catch(() => null),
       ]);
-      return J({ ok: true, customerId: naver.CUSTOMER, bizmoney: biz, ...data });
+      // 캠페인별 구매(purchase)/장바구니(add_to_cart) 병합 → 실구매 ROAS·구매전환율
+      if (conv && conv.byCampaign && Array.isArray(data.rows)) {
+        for (const r of data.rows) {
+          const b = conv.byCampaign[r.id] || { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
+          r.buyCnt = b.buyCnt; r.buyVal = b.buyVal;
+          r.buyRoas = r.salesAmt ? Math.round(b.buyVal / r.salesAmt * 100) : 0;
+          r.buyCvr = r.clkCnt ? +(b.buyCnt / r.clkCnt * 100).toFixed(2) : 0;
+          r.cartCnt = b.cartCnt; r.cartVal = b.cartVal;
+        }
+      }
+      return J({ ok: true, customerId: naver.CUSTOMER, bizmoney: biz, convBuilt: !!(conv && conv.byCampaign), ...data });
     }
 
     return J({ ok: false, error: 'not found: ' + p }, 404);
