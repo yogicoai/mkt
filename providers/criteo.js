@@ -11,7 +11,7 @@ const RETAIL = process.env.CRITEO_RETAIL_ACCOUNT_ID;       // 선택: Retail Med
 const V = process.env.CRITEO_API_VERSION || '2026-01';
 const VR = process.env.CRITEO_RETAIL_VERSION || '2025-07';
 
-function enabled() { return !!ID && !!SECRET && !!ADV; }
+function enabled() { return !!ID && !!SECRET; } // 광고주ID(ADV)는 승인 후 자동조회 → 키만 있으면 활성
 
 let _tok = null, _exp = 0;
 async function token() {
@@ -26,6 +26,21 @@ async function token() {
   _tok = j.access_token;
   _exp = Date.now() + ((j.expires_in || 900) - 60) * 1000; // 15분 만료 - 여유 60s
   return _tok;
+}
+
+// 광고주 ID: env(CRITEO_ADVERTISER_ID)에 있으면 그걸, 없으면 승인된 광고주를 자동 조회.
+// → 앱(App 25299)을 광고주에 연결(승인)만 하면 별도 설정 없이 통계가 잡힘.
+//   (검증 2026-06: 승인 전엔 GET /{V}/advertisers/me 가 {"data":[]} 반환)
+let _advCache = ADV ? (Array.isArray(ADV) ? ADV.join(',') : String(ADV)) : null;
+async function advertiserIds(tok) {
+  if (_advCache) return _advCache;
+  const res = await fetch(`https://api.criteo.com/${V}/advertisers/me`, { headers: { Authorization: `Bearer ${tok}` } });
+  let j = null; try { j = await res.json(); } catch (_) {}
+  const arr = (j && j.data) || [];
+  const ids = (Array.isArray(arr) ? arr : [arr]).map((a) => a && (a.id != null ? a.id : (a.attributes && a.attributes.id))).filter(Boolean);
+  if (!ids.length) throw new Error('Criteo 접근 가능한 광고주가 없습니다 — 앱(App 25299)을 Yogibo 광고주에 연결(승인)했는지 확인하세요(승인되면 자동 인식).');
+  _advCache = ids.join(',');
+  return _advCache;
 }
 
 async function balance(tok) {
@@ -53,9 +68,10 @@ module.exports = {
   enabled,
   async getSummary(date) {
     const tok = await token();
+    const advIds = await advertiserIds(tok);
     const d = dash(date);
     const body = {
-      advertiserIds: Array.isArray(ADV) ? ADV.join(',') : String(ADV),
+      advertiserIds: advIds,
       currency: 'KRW',
       dimensions: ['Day'],
       metrics: ['AdvertiserCost', 'SalesPc30dPv24h', 'RevenueGeneratedPc30dPv24h'],
