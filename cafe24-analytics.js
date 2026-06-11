@@ -44,7 +44,11 @@ async function caGet(endpoint, params, _retry) {
   if (r.status === 401 && !_retry) return caGet(endpoint, params, true); // DB 최신 토큰으로 1회 재시도(yogiChat 갱신분)
   const txt = await r.text();
   let j; try { j = JSON.parse(txt); } catch (_) { throw new Error(`Cafe24 분석 응답 파싱 실패 (HTTP ${r.status}): ${txt.slice(0, 140)}`); }
-  if (r.status >= 400) throw new Error(`Cafe24 분석 HTTP ${r.status}: ${j.message || j.error || JSON.stringify(j).slice(0, 160)}`);
+  if (r.status >= 400) {
+    let msg = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : null))) || j.message || JSON.stringify(j).slice(0, 160);
+    if (r.status === 401) msg += ' — Cafe24 토큰 만료. yogiChat(토큰 소유자)가 갱신해야 합니다.';
+    const err = new Error(`Cafe24 분석 HTTP ${r.status}: ${msg}`); err.code = r.status; throw err;
+  }
   return j;
 }
 
