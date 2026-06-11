@@ -11,6 +11,7 @@ import metaApi from '@/meta-api';
 import aiDaily from '@/ai-daily';
 import campaigns from '@/campaigns';
 import gfa from '@/gfa';
+import kakao from '@/providers/kakao';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -218,6 +219,17 @@ export async function GET(req) {
         }
       }
       return J({ ok: true, customerId: naver.CUSTOMER, bizmoney: biz, convBuilt: !!(conv && conv.byCampaign), ...data });
+    }
+
+    // ── 카카오모먼트 (보고서 + 연결상태) ──
+    if (p === '/api/kakao') {
+      if (!kakao.enabled()) return J({ ok: false, error: '카카오 미설정 (KAKAO_REST_API_KEY / KAKAO_AD_ACCOUNT_ID)' }, 400);
+      const connected = await kakao.hasToken();
+      if (!connected) return J({ ok: true, connected: false, authUrl: '/api/kakao/authorize' });
+      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
+      const rows = await kakao.getSummary(date);
+      return J({ ok: true, connected: true, date, rows });
     }
 
     return J({ ok: false, error: 'not found: ' + p }, 404);

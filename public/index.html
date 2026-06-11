@@ -277,6 +277,7 @@ function loadTab(t){
   if(t==='utm') loadUtm(gStart,gEnd);
   else if(t==='meta') loadMeta(gStart,gEnd);
   else if(t==='camp') loadCamp(gStart,gEnd);
+  else if(t==='kakao') loadKakao();
   else if(t==='ai') renderAiSetup();
   tabPeriod[t]=periodKey();
 }
@@ -298,7 +299,6 @@ function ymd(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-
   loadTab('all');                 // 전체+네이버
   loadTrend(90);
   renderCriteo();
-  renderKakao();
   loadGfa();
 })();
 
@@ -324,7 +324,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   if(t==='naver' && chart) try{ chart.resize(); }catch(_){}
   if(t==='all' && trendChart) try{ trendChart.resize(); }catch(_){}
   // 상단 글로벌 기간으로 (아직 그 기간으로 안 불러온 탭만) 로드
-  if(t!=='criteo' && t!=='kakao' && tabPeriod[t]!==periodKey()) loadTab(t);
+  if(t!=='criteo' && tabPeriod[t]!==periodKey()) loadTab(t);
 }));
 // META 캠페인행 클릭 → 소재 드릴다운 (위임)
 $('#meta').addEventListener('click',(e)=>{ const tr=e.target.closest&&e.target.closest('.meta-camp-row'); if(tr && $('#meta').contains(tr)) toggleMetaAds(tr); });
@@ -414,10 +414,28 @@ function renderCriteo(){
   el.innerHTML='<div class="panel"><h2>크리테오 (연동 대기)</h2><div style="color:var(--tx3);font-size:13px;line-height:1.85">코드는 완성됐고, Criteo 개발자 앱(App ID 25299)을 <b>광고주(Yogibo KR)에 연결(consent)</b>하면 자동 표시됩니다.<br>· 연결은 Criteo 담당자(account manager)에게 요청해야 합니다.<br>· <b>승인되면 광고주 ID를 자동 인식</b>해 추가 설정 없이 바로 표시됩니다.<br>· 연동되면: 상품·캠페인별 <b>광고비 / 전환 / 전환매출 / ROAS</b>를 위 통합표와 이 탭에서 함께 보여줍니다.</div></div>';
 }
 
-// ── 카카오모먼트 탭 (연동 대기 안내) ──
-function renderKakao(){
+// ── 카카오모먼트 탭 (연결 → 보고서) ──
+async function loadKakao(){
   const el=$('#kakao'); if(!el) return;
-  el.innerHTML='<div class="panel"><h2>카카오모먼트 (연동 대기)</h2><div style="color:var(--tx3);font-size:13px;line-height:1.85">카카오모먼트 API는 <b>공식 광고대행사 권한</b>이 있어야 열립니다(앱 387882 비즈앱 → 추가기능 "카카오모먼트" 신청 → 심사 3~5일).<br>· 승인 전까지는 <b>📥 GFA 탭</b>에 카카오 캠페인 엑셀을 함께 올리면 기간별로 집계됩니다.<br>· 승인되면: 캠페인별 <b>광고비 / 전환 / 전환매출 / ROAS</b>를 통합표와 이 탭에 자동 표시합니다.</div></div>';
+  el.innerHTML='<div class="panel"><div class="state" style="padding:30px"><div class="spin"></div>카카오모먼트 불러오는 중…</div></div>';
+  try{
+    const j=await (await fetch('/api/kakao?date='+(gEnd||ymd(new Date())).replace(/-/g,''))).json();
+    if(!j.ok){ el.innerHTML='<div class="panel"><h2>카카오모먼트</h2><div class="err" style="margin:6px 0">'+(j.error||'실패')+'</div></div>'; return; }
+    if(!j.connected){
+      el.innerHTML='<div class="panel"><h2>카카오모먼트 — 연결 필요</h2>'
+        +'<div style="font-size:13px;color:var(--tx2);line-height:1.8;margin:6px 0 14px">카카오모먼트 API 권한은 <b>승인 완료</b>됐어요. 아래 버튼으로 <b>1회 동의(연결)</b>하면 광고비·전환·매출이 표시됩니다.<br><span style="font-size:11.5px;color:var(--tx3)">※ 카카오 로그인 Redirect URI에 <b>'+location.origin+'/api/kakao/callback</b> 이 등록돼 있어야 해요.</span></div>'
+        +'<a href="/api/kakao/authorize" target="_blank" style="display:inline-block;background:#FEE500;color:#191600;font-weight:800;padding:11px 20px;border-radius:10px;text-decoration:none">🔗 카카오모먼트 연결하기</a></div>';
+      return;
+    }
+    const r=(j.rows&&j.rows[0])||{};
+    const roas=r.spend?Math.round((r.convValue||0)/r.spend*100):0;
+    const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
+    el.innerHTML='<div class="panel"><h2>카카오모먼트 ('+j.date+')</h2>'
+      +'<div class="glossary" style="margin:0 0 10px">💡 카카오모먼트 보고서 API · 전환/전환매출은 1일 기여(conv_purchase_1d) 기준. 당일은 집계 전일 수 있어요.</div>'
+      +'<table><thead><tr><th style="text-align:left">광고계정</th><th>광고비</th><th>노출</th><th>클릭</th><th>전환</th><th>전환매출</th><th>ROAS</th></tr></thead><tbody>'
+      +'<tr><td style="text-align:left">카카오모먼트</td><td>'+won(r.spend)+'</td><td>'+won(r.imp)+'</td><td>'+won(r.clk)+'</td><td>'+won(r.conversions)+'</td><td>'+won(r.convValue)+'</td><td><span class="roas '+cls(roas)+'">'+won(roas)+'%</span></td></tr>'
+      +'</tbody></table></div>';
+  }catch(e){ el.innerHTML='<div class="panel"><div class="err" style="margin:6px 0">카카오 조회 실패: '+e.message+'</div></div>'; }
 }
 
 // ── GFA 수동 입력 (전체 탭) ──

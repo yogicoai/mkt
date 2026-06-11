@@ -5,8 +5,9 @@ const naver = require('./naver');
 const meta = require('./meta');
 const criteo = require('./criteo');
 const gfa = require('./gfa');
+const kakao = require('./kakao');
 
-const ALL = [naver, meta, criteo, gfa];
+const ALL = [naver, meta, criteo, gfa, kakao];
 
 async function getAllSummaries(date) {
   const on = ALL.filter((p) => p.enabled());
