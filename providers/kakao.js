@@ -17,6 +17,8 @@ const SCOPE = process.env.KAKAO_SCOPE || 'moment_management';
 const TOKEN_KEY = 'kakao-token';
 const AUTH = 'https://kauth.kakao.com/oauth/business';
 const API = 'https://apis.moment.kakao.com/openapi/v4';
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const _sumCache = new Map(); const SUM_TTL = 5 * 60 * 1000; // 보고서 5분 캐시(호출제한 5초/1회 회피)
 
 function enabled() { return !!REST_KEY && !!ADACCT; }
 
@@ -56,8 +58,9 @@ async function refresh(tok) {
   return next;
 }
 
-// 보고서 호출 (401 → refresh 후 1회 재시도)
-async function report(date, _retry) {
+// 보고서 호출 (401 → refresh 재시도, 429 → 호출제한 대기 후 재시도)
+async function report(date, opts) {
+  opts = opts || {};
   const tok = await getStoredToken();
   if (!tok || !tok.access_token) throw new Error('카카오 비즈니스 토큰 없음 — 대시보드 카카오 탭에서 "연결하기"로 1회 동의가 필요합니다.');
   const d = dash(date).replace(/-/g, ''); // yyyyMMdd
@@ -66,12 +69,14 @@ async function report(date, _retry) {
   u.searchParams.set('start', d); u.searchParams.set('end', d);
   u.searchParams.set('metricsGroup', 'BASIC,PIXEL_SDK_CONVERSION');
   const r = await fetch(u, { headers: { Authorization: `Bearer ${tok.access_token}`, adAccountId: String(ADACCT) } });
-  if (r.status === 401 && !_retry) { const n = await refresh(tok); if (n) return report(date, true); }
+  if (r.status === 401 && !opts.refreshed) { const n = await refresh(tok); if (n) return report(date, { ...opts, refreshed: true }); }
+  if (r.status === 429 && !opts.rateRetried) { await _sleep(5500); return report(date, { ...opts, rateRetried: true }); } // 호출제한 5초/1회
   const txt = await r.text();
   let j; try { j = JSON.parse(txt); } catch (_) { throw new Error(`카카오모먼트 응답 파싱 실패 (HTTP ${r.status}): ${txt.slice(0, 140)}`); }
   if (!r.ok) {
     let msg = (j && (j.message || j.msg || (j.error && (j.error.message || j.error)))) || JSON.stringify(j).slice(0, 160);
     if (r.status === 401) msg += ' — 토큰 만료/무효. 카카오 탭에서 다시 연결하세요.';
+    if (r.status === 429) msg += ' — 호출 제한(5초에 1회). 잠시 후 다시 조회하세요.';
     const e = new Error(`카카오모먼트 HTTP ${r.status}: ${msg}`); e.code = r.status; throw e;
   }
   return j;
@@ -80,6 +85,9 @@ async function report(date, _retry) {
 module.exports = {
   id: 'kakao', label: '카카오모먼트', enabled, authorizeUrl, exchangeCode, hasToken,
   async getSummary(date) {
+    const key = String(date);
+    const hit = _sumCache.get(key);
+    if (hit && Date.now() - hit.at < SUM_TTL) return hit.data;
     const j = await report(date);
     let spend = 0, imp = 0, click = 0, conv = 0, rev = 0;
     for (const row of (j.data || [])) {
@@ -87,6 +95,8 @@ module.exports = {
       spend += +m.cost || 0; imp += +m.imp || 0; click += +m.click || 0;
       conv += +m.conv_purchase_1d || 0; rev += +m.conv_purchase_p_1d || 0;
     }
-    return [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), imp, clk: click, balance: null, currency: 'KRW' }];
+    const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), imp, clk: click, balance: null, currency: 'KRW' }];
+    _sumCache.set(key, { at: Date.now(), data: rows });
+    return rows;
   },
 };
