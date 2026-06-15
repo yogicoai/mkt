@@ -98,7 +98,9 @@ module.exports = {
     let spend = 0, imp = 0, click = 0, conv = 0, rev = 0;
     for (const row of (j.data || [])) {
       const m = row.metrics || row || {};
-      spend += +m.cost || 0; imp += +m.imp || 0; click += +m.click || 0;
+      spend += +m.cost || 0;
+      imp += (+m.imp || 0) + (+m.msg_send || 0);    // 메시지 캠페인은 노출 대신 발송수
+      click += (+m.click || 0) + (+m.msg_click || 0); // 메시지 클릭 포함
       conv += +m.conv_purchase_1d || 0; rev += +m.conv_purchase_p_1d || 0;
     }
     const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), imp, clk: click, balance: null, currency: 'KRW' }];

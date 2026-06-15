@@ -718,20 +718,32 @@ function renderPlatforms(d){
   const roas=(s,r)=> s? Math.round(r/s*100):0;
   const bal=v=> v==null? '<span style="color:#9aa3ad">–</span>' : won(v);
   const sum=rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),conv:a.conv+(r.conversions||0),rev:a.rev+(r.convValue||0),bal:a.bal+(r.balance||0)}),{spend:0,conv:0,rev:0,bal:0});
-  const tr=r=>`<tr><td><b>${r.platform}</b>${r.note?` <span style="font-size:11px;color:#9aa3ad">${r.note}</span>`:''}</td>
+  const tr=r=>{ const R=roas(r.spend,r.convValue), e=effTier(r.spend,R);
+    return `<tr><td><b>${r.platform}</b>${r.note?` <span style="font-size:11px;color:#9aa3ad">${r.note}</span>`:''}</td>
     <td>${won(r.spend)}</td><td>${won(r.conversions)}</td><td>${won(r.convValue)}</td>
-    <td><span class="roas ${r.spend>0&&roas(r.spend,r.convValue)>=300?'hi':(r.spend>0?'mid':'na')}">${won(roas(r.spend,r.convValue))}%</span></td>
-    <td>${bal(r.balance)}</td></tr>`;
+    <td><span class="roas ${e.cls}">${won(R)}%</span></td>
+    <td style="text-align:left;font-size:11.5px;font-weight:600">${e.advice}</td>
+    <td>${bal(r.balance)}</td></tr>`; };
   const disabled=(d.disabled||[]).length? `<div style="font-size:12px;color:var(--muted);margin-top:10px">⏳ 미연동(자격증명 대기): <b>${d.disabled.join(', ')}</b></div>`:'';
   const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
-  $('#platforms').innerHTML=`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 잔액</h2>
-    <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th>잔액</th></tr></thead>
-    <tbody>${rows.map(tr).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
-    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td>${won(sum.bal)}</td></tr>
-    </tbody></table>${disabled}${errs}</div>`;
+  $('#platforms').innerHTML=`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
+    <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th style="text-align:left">진단·조언</th><th>잔액</th></tr></thead>
+    <tbody>${rows.map(tr).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
+    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td></td><td>${won(sum.bal)}</td></tr>
+    </tbody></table>
+    <div class="glossary" style="margin:8px 0 0">💡 <b>진단</b>은 ROAS(전환매출÷광고비) 자동 신호 — 🟢 300%↑ 우수 · 🟡 100%↑ 본전 · 🔴 100% 미만/전환0 = 손해. 참고용(매체별 전환기준 차이 있음).</div>
+    ${disabled}${errs}</div>`;
 }
 
 function roasClass(r,cost){ if(cost>0&&r===0)return 'na'; if(r>=300)return 'hi'; if(r>=100)return 'mid'; if(cost>0)return 'lo'; return 'na'; }
+// 매체 효율 등급 + 한 줄 조언 (ROAS 기반 자동 신호)
+function effTier(spend, r){
+  if(!spend || spend<=0) return {cls:'na', advice:'<span style="color:var(--tx3)">— 집행 없음</span>'};
+  if(r>=300) return {cls:'hi', advice:'<span style="color:#1B64DA">🟢 효율 우수 — 유지·증액 고려</span>'};
+  if(r>=100) return {cls:'mid', advice:'<span style="color:#C2710C">🟡 본전 이상 — 개선 여지</span>'};
+  if(r>0)    return {cls:'lo', advice:'<span style="color:#E03131">🔴 광고비>매출 — 예산 축소·소재 점검</span>'};
+  return {cls:'lo', advice:'<span style="color:#E03131">🔴 전환 0 — 타겟·캠페인 재점검</span>'};
+}
 
 function render(j){
   const t=j.totals;
