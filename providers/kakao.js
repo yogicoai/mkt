@@ -88,7 +88,13 @@ module.exports = {
     const key = String(date);
     const hit = _sumCache.get(key);
     if (hit && Date.now() - hit.at < SUM_TTL) return hit.data;
-    const j = await report(date);
+    let j;
+    try { j = await report(date); }
+    catch (e) {
+      if (e && e.code === 401) throw e;          // 토큰 만료/무효는 노출(재연결 필요)
+      if (hit) return hit.data;                  // 429 등 일시 오류는 조용히 — 캐시 있으면 그걸
+      return [{ platform: '카카오모먼트', spend: 0, conversions: 0, convValue: 0, imp: 0, clk: 0, balance: null, currency: 'KRW', note: '집계 대기' }]; // 없으면 0행(통합표 오류 X)
+    }
     let spend = 0, imp = 0, click = 0, conv = 0, rev = 0;
     for (const row of (j.data || [])) {
       const m = row.metrics || row || {};
