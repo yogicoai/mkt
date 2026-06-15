@@ -43,24 +43,29 @@ async function parseUpload(buf) {
     }
   }
   if (hi < 0) throw new Error('헤더(날짜·캠페인명)를 찾지 못했습니다. 컬럼명을 확인하세요.');
-  const data = await read();
-  let added = 0; const dates = [];
+  // 새 파일을 먼저 파싱 → 새 파일이 덮는 날짜 집합 수집
+  const incoming = {}; const dateSet = new Set(); const dates = [];
   for (let i = hi + 1; i < rows.length; i++) {
     const r = rows[i] || [];
     const date = normDate(r[col.date]); const camp = String(r[col.camp] == null ? '' : r[col.camp]).trim();
     if (!date || !camp) continue;
-    data[date + '\t' + camp] = {
+    incoming[date + '\t' + camp] = {
       date, campaign: camp,
       imp: col.imp >= 0 ? num(r[col.imp]) : 0, clk: col.clk >= 0 ? num(r[col.clk]) : 0,
       spend: col.spend >= 0 ? num(r[col.spend]) : 0,
       purch: col.purch >= 0 ? num(r[col.purch]) : 0, cart: col.cart >= 0 ? num(r[col.cart]) : 0,
       purchVal: col.purchVal >= 0 ? num(r[col.purchVal]) : 0, cartVal: col.cartVal >= 0 ? num(r[col.cartVal]) : 0,
     };
-    added++; dates.push(date);
+    dateSet.add(date); dates.push(date);
   }
+  const data = await read();
+  // 중복 기간: 새 파일이 덮는 날짜의 기존 데이터는 삭제 → 새 파일 우선
+  let replaced = 0;
+  for (const k of Object.keys(data)) { if (dateSet.has(k.split('\t')[0])) { delete data[k]; replaced++; } }
+  Object.assign(data, incoming);
   await write(data);
   dates.sort();
-  return { added, from: dates[0] || null, to: dates[dates.length - 1] || null, totalRows: Object.keys(data).length };
+  return { added: Object.keys(incoming).length, replaced, from: dates[0] || null, to: dates[dates.length - 1] || null, totalRows: Object.keys(data).length };
 }
 
 async function query(start, end) {
@@ -86,4 +91,14 @@ async function query(start, end) {
   return { rows, totals, storedFrom: minD, storedTo: maxD, count: rows.length };
 }
 
-module.exports = { parseUpload, query };
+async function clearAll() { await write({}); return { cleared: true, totalRows: 0 }; }
+async function clearRange(start, end) {
+  const data = await read();
+  const s = start || '0000-00-00', e = end || '9999-99-99';
+  let removed = 0;
+  for (const k of Object.keys(data)) { const d = data[k].date; if (d >= s && d <= e) { delete data[k]; removed++; } }
+  await write(data);
+  return { removed, totalRows: Object.keys(data).length };
+}
+
+module.exports = { parseUpload, query, clearAll, clearRange };

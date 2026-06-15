@@ -482,8 +482,21 @@ function renderCamp(j,start,end){
   const s=start||j.storedFrom||'', e=end||j.storedTo||'';
   const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 GFA · 캠페인 엑셀 업로드 <span style="font-size:12px;color:var(--tx3)">날짜·캠페인별 지표 · 기간은 상단에서</span></div>'
     +'<div style="font-size:11px;color:var(--tx3);margin:8px 0">조회 기간: <b>'+(s?(s+' ~ '+e):'전체')+'</b></div>'
-    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="qb" style="cursor:pointer">📑 엑셀(.xlsx) 업로드<input type="file" id="cFile" accept=".xlsx" style="display:none"></label><span id="cStat" style="font-size:11px;color:var(--tx3)"></span></div>'
-    +'<div class="glossary" style="margin:8px 0 0">컬럼 자동인식: <b>날짜·캠페인명·노출·클릭·광고비·CPC·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. '+(j.storedFrom?('저장된 데이터: <b>'+j.storedFrom+' ~ '+j.storedTo+'</b>'):'아직 업로드된 데이터가 없어요.')+' 같은 날짜·캠페인은 재업로드 시 갱신됩니다.</div></div>';
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+      +'<label class="qb" style="cursor:pointer">📑 엑셀(.xlsx) 선택<input type="file" id="cFile" accept=".xlsx" style="display:none"></label>'
+      +'<button id="cSave" class="qb" style="background:var(--ac);color:#fff;border-color:var(--ac);opacity:.45;pointer-events:none">💾 DB에 저장</button>'
+      +'<span id="cStat" style="font-size:11px;color:var(--tx3)"></span>'
+    +'</div>'
+    +'<div class="glossary" style="margin:8px 0 0">컬럼 자동인식: <b>날짜·캠페인명·노출·클릭·광고비·CPC·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. '+(j.storedFrom?('저장됨: <b>'+j.storedFrom+' ~ '+j.storedTo+'</b> ('+(j.count||0)+'개 캠페인)'):'아직 업로드된 데이터가 없어요.')+' <b>중복 날짜는 새 파일로 교체</b>돼요.</div>'
+    +(j.storedFrom?('<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">'
+      +'<span style="font-size:11px;color:var(--tx3)">🗂 관리</span>'
+      +'<input type="date" id="cDelStart" value="'+(j.storedFrom||'')+'" style="font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:6px">'
+      +'<span style="font-size:11px;color:var(--tx3)">~</span>'
+      +'<input type="date" id="cDelEnd" value="'+(j.storedTo||'')+'" style="font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:6px">'
+      +'<button id="cDelRange" class="qb" style="font-size:11px">기간 삭제</button>'
+      +'<button id="cClear" class="qb" style="font-size:11px;color:#E03131;border-color:#F3C0C0">전체 삭제</button>'
+    +'</div>'):'')
+    +'</div>';
   const rows=j.rows||[];
   const body=rows.length? rows.map(r=>'<tr>'
     +'<td style="text-align:left">'+esc(r.campaign)+'</td>'
@@ -496,13 +509,32 @@ function renderCamp(j,start,end){
   const table='<div class="panel"><h2>캠페인별 '+(s?('('+s+' ~ '+e+')'):'(전체)')+' · '+rows.length+'개</h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
   $('#camp').innerHTML=ctrl+table;
   // 기간 컨트롤은 상단 통합바로 일원화
-  const cf=$('#cFile'); if(cf) cf.addEventListener('change',async(ev)=>{
-    const f=ev.target.files&&ev.target.files[0]; if(!f) return;
-    const st=$('#cStat'); if(st){ st.textContent='업로드·분석 중…'; st.style.color='var(--tx3)'; }
-    try{ const r=await fetch('/api/campaigns-upload',{method:'POST',body:f}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
-      if(st){ st.textContent='✓ '+jj.added+'행 반영 ('+jj.from+'~'+jj.to+')'; st.style.color='var(--ac)'; }
-      loadCamp(jj.from,jj.to);
-    }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } }
+  // 2단계: 파일 선택 → [💾 DB에 저장] 클릭으로 저장 (중복 날짜는 새 파일 우선)
+  let _cFile=null;
+  const cf=$('#cFile'), cSave=$('#cSave'), st=$('#cStat');
+  if(cf) cf.addEventListener('change',(ev)=>{
+    _cFile=(ev.target.files&&ev.target.files[0])||null;
+    if(st){ st.textContent=_cFile?('선택됨: '+_cFile.name+' → [💾 DB에 저장] 클릭'):''; st.style.color='var(--tx3)'; }
+    if(cSave){ cSave.style.opacity=_cFile?'1':'.45'; cSave.style.pointerEvents=_cFile?'auto':'none'; }
+  });
+  if(cSave) cSave.addEventListener('click',async()=>{
+    if(!_cFile) return;
+    if(st){ st.textContent='저장 중…'; st.style.color='var(--tx3)'; } cSave.style.pointerEvents='none';
+    try{ const r=await fetch('/api/campaigns-upload',{method:'POST',body:_cFile}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
+      if(st){ st.textContent='✓ 저장됨 '+jj.added+'행'+(jj.replaced?(' · 중복 '+jj.replaced+'행 교체'):'')+' ('+jj.from+'~'+jj.to+')'; st.style.color='var(--ac)'; }
+      _cFile=null; loadCamp(jj.from,jj.to);
+    }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } cSave.style.pointerEvents='auto'; }
+  });
+  const cClear=$('#cClear'); if(cClear) cClear.addEventListener('click',async()=>{
+    if(!confirm('저장된 캠페인 데이터를 전부 삭제할까요? 되돌릴 수 없어요.')) return;
+    try{ const r=await fetch('/api/campaigns-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({all:true})}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패'); loadCamp(start,end); }
+    catch(err){ alert('삭제 실패: '+err.message); }
+  });
+  const cDel=$('#cDelRange'); if(cDel) cDel.addEventListener('click',async()=>{
+    const ds=$('#cDelStart').value, de=$('#cDelEnd').value; if(!ds||!de){ alert('삭제할 기간을 선택하세요'); return; }
+    if(!confirm(ds+' ~ '+de+' 기간 데이터를 삭제할까요?')) return;
+    try{ const r=await fetch('/api/campaigns-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start:ds,end:de})}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패'); alert((jj.removed||0)+'행 삭제됨'); loadCamp(start,end); }
+    catch(err){ alert('삭제 실패: '+err.message); }
   });
 }
 

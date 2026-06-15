@@ -257,6 +257,13 @@ export async function POST(req) {
       return J({ ok: true, ...r });
     }
 
+    // ── 캠페인 데이터 삭제 (전체 / 기간) ──
+    if (p === '/api/campaigns-delete') {
+      const d = await req.json().catch(() => ({}));
+      const r = d.all ? await campaigns.clearAll() : await campaigns.clearRange(d.start, d.end);
+      return J({ ok: true, ...r });
+    }
+
     // ── GFA 수동 입력(월별) ──
     if (p === '/api/gfa') {
       const d = await req.json().catch(() => ({}));
