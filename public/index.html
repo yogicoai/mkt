@@ -101,6 +101,7 @@
   .roas.mid{background:#FFF4E5;color:#C2710C}
   .roas.lo{background:#FEECEC;color:#E03131}
   .roas.na{background:#F2F4F6;color:#ADB5BD}
+  .lbadge{display:inline-block;background:#EEF6FF;color:#2563EB;border:1px solid #D6E6FF;border-radius:6px;padding:1px 7px;font-size:10.5px;font-weight:700;vertical-align:middle}
 
   .state{text-align:center;padding:60px 20px;color:var(--tx3);font-weight:500}
   .spin{width:28px;height:28px;border:3px solid #E5E8EB;border-top-color:var(--ac);
@@ -366,7 +367,7 @@ function renderMetaTab(j){
       +'</div>';
     const rows=a.campaigns.filter(c=>c.spend>0||c.imp>0);
     const body=rows.length? rows.map(c=>'<tr class="meta-camp-row" data-acct="'+esc(a.id)+'" data-camp="'+esc(c.id)+'" data-name="'+esc(c.name)+'" style="cursor:pointer">'
-      +'<td style="text-align:left">'+esc(c.name)+' <span style="color:var(--ac);font-size:10px">▸소재</span></td>'
+      +'<td style="text-align:left">'+esc(c.name)+' <span class="lbadge">'+(/샐리필|sally/i.test(a.platform)?'오늘의집':'자사몰')+'</span> <span style="color:var(--ac);font-size:10px">▸소재</span></td>'
       +'<td>'+won(c.spend)+'</td><td>'+won(c.imp)+'</td><td>'+won(c.clk)+'</td><td>'+c.ctr+'%</td>'
       +'<td>'+won(c.cart)+'</td><td>'+won(c.purch)+'</td><td>'+won(c.purchVal)+'</td>'
       +'<td><span class="roas '+cls(c.roas)+'">'+won(c.roas)+'%</span></td></tr>').join('')
@@ -744,6 +745,19 @@ function effTier(spend, r){
   if(r>0)    return {cls:'lo', advice:'<span style="color:#E03131">🔴 광고비>매출 — 예산 축소·소재 점검</span>'};
   return {cls:'lo', advice:'<span style="color:#E03131">🔴 전환 0 — 타겟·캠페인 재점검</span>'};
 }
+// 캠페인 랜딩(구분) 추정 — 자동분류가 틀리면 LANDING_LABEL에 '캠페인명 일부':'랜딩' 추가
+const LANDING_LABEL = { '메인키워드':'스마트스토어', '세부키워드':'스마트스토어', '카탈로그':'스마트스토어', 'ADVoost':'스마트스토어' };
+function landingOf(name){
+  const n=String(name||'');
+  for(const k in LANDING_LABEL){ if(n.indexOf(k)>=0) return LANDING_LABEL[k]; }
+  if(/오늘의?집/.test(n)) return '오늘의집';
+  if(/샐리필|sally/i.test(n)) return '샐리필';
+  if(/스마트\s*스토어/.test(n)) return '스마트스토어';
+  if(/자사몰|파워링크/.test(n)) return '자사몰';
+  if(/브랜드/.test(n)) return '스토어';
+  if(/스토어/.test(n)) return '스마트스토어';
+  return '';
+}
 
 function render(j){
   const t=j.totals;
@@ -812,7 +826,7 @@ function drawTable(){
   document.querySelectorAll('th[data-k]').forEach(th=>th.classList.toggle('sorted',th.dataset.k===sortKey));
   $('#tbody').innerHTML = rows.map(r=>`
     <tr class="camp-row" data-id="${r.id||''}" data-name="${(r.name||'').replace(/"/g,'&quot;')}" data-tp="${r.tp||''}" style="cursor:pointer">
-      <td><span class="badge ${r.tp}">${r.tp}</span>${r.name} <span style="color:var(--ac);font-size:10px">▸${r.tp==='SHOPPING'?'상품':'그룹'}</span></td>
+      <td><span class="badge ${r.tp}">${r.tp}</span>${r.name} ${landingOf(r.name)?`<span class="lbadge">${landingOf(r.name)}</span> `:''}<span style="color:var(--ac);font-size:10px">▸${r.tp==='SHOPPING'?'상품':'그룹'}</span></td>
       <td>${won(r.salesAmt)}</td>
       <td>${won(r.impCnt)}</td>
       <td>${won(r.clkCnt)}</td>

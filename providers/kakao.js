@@ -82,6 +82,22 @@ async function report(date, opts) {
   return j;
 }
 
+// 광고계정 캐시 잔액 — GET /adAccounts/balance (헤더 adAccountId). 응답 cash(유상)+freeCash(무상). 5분 캐시.
+let _balCache = { at: 0, val: null };
+async function balance() {
+  if (_balCache.val != null && Date.now() - _balCache.at < SUM_TTL) return _balCache.val;
+  const tok = await getStoredToken();
+  if (!tok || !tok.access_token) return null;
+  try {
+    const r = await fetch(`${API}/adAccounts/balance`, { headers: { Authorization: `Bearer ${tok.access_token}`, adAccountId: String(ADACCT) } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const val = (+j.cash || 0) + (+j.freeCash || 0); // 유상+무상 캐시 합 = 보유 잔액(원)
+    _balCache = { at: Date.now(), val };
+    return val;
+  } catch (_) { return null; }
+}
+
 module.exports = {
   id: 'kakao', label: '카카오모먼트', enabled, authorizeUrl, exchangeCode, hasToken,
   async getSummary(date) {
@@ -103,7 +119,8 @@ module.exports = {
       click += (+m.click || 0) + (+m.msg_click || 0); // 메시지 클릭 포함
       conv += +m.conv_purchase_1d || 0; rev += +m.conv_purchase_p_1d || 0;
     }
-    const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), imp, clk: click, balance: null, currency: 'KRW' }];
+    const bal = await balance();
+    const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), imp, clk: click, balance: bal, currency: 'KRW' }];
     _sumCache.set(key, { at: Date.now(), data: rows });
     return rows;
   },
