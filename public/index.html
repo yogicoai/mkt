@@ -228,6 +228,7 @@
     <button class="tab" data-tab="criteo">크리테오</button>
     <button class="tab" data-tab="camp">📥 GFA</button>
     <button class="tab" data-tab="ai">🤖 AI 분석</button>
+    <button class="tab" data-tab="report">📋 일일보고</button>
   </div>
 
   <div class="tabpane" data-pane="all">
@@ -269,6 +270,10 @@
   <div class="tabpane" data-pane="ai" hidden>
     <div id="ai"><div class="state" style="padding:40px">AI 분석 탭을 열면 기간·필요정보를 정해 분석합니다</div></div>
   </div>
+
+  <div class="tabpane" data-pane="report" hidden>
+    <div id="report"><div class="state" style="padding:40px">일일보고 탭을 열면 보고 대상일을 정해 복사용 텍스트를 만듭니다</div></div>
+  </div>
 </div>
 
 <div id="lightbox"><span class="lb-x">✕</span><img alt="소재 미리보기"></div>
@@ -296,6 +301,7 @@ function loadTab(t){
   else if(t==='camp') loadCamp(gStart,gEnd);
   else if(t==='kakao') loadKakao();
   else if(t==='ai') renderAiSetup();
+  else if(t==='report') renderReport();
   tabPeriod[t]=periodKey();
 }
 function reloadActive(){ tabPeriod={}; loadTab(activeTab()); }
@@ -583,14 +589,12 @@ function aiControls(s,e,focus,resultMode,when,costLine){
     +'<div style="font-size:12px;color:var(--tx2);font-weight:600;margin-bottom:5px">무엇을 분석할까요? <span style="color:var(--tx3);font-weight:400">(선택 — 비우면 전체 종합)</span></div>'
     +'<textarea id="aiFocus" placeholder="예: 메타 소재별 효율 / 예산 줄일 곳 / 파워링크 키워드 위주로 / 카카오 플친 성과" style="width:100%;min-height:48px;border:1px solid var(--bd);border-radius:10px;padding:9px 11px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box">'+esc(focus||'')+'</textarea>'
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button id="aiGo">🔍 분석하기</button>'+(resultMode?'<button class="qb" id="aiRe">🔄 다시(새로 생성)</button>':'')
-    +'<button class="qb" id="dailyRep" title="설정한 기간의 끝 날짜 기준으로 복사용 일일보고 텍스트를 만듭니다">📋 일일보고 양식</button>'
     +'<span style="font-size:11px;color:var(--tx3)">'+(when?('생성 '+when+' · '):'')+(costLine||'분석 1회 약 ₩수십~수백, 같은 조건 재방문은 무료')+'</span></div></div>';
 }
 function aiWire(){
   $('#ai').querySelectorAll('[data-air]').forEach(b=>b.addEventListener('click',()=>{ const x=urRange(b.dataset.air); $('#aiS').value=x[0]; $('#aiE').value=x[1]; $('#ai').querySelectorAll('[data-air]').forEach(o=>o.classList.toggle('on',o===b)); }));
   const go=$('#aiGo'); if(go) go.addEventListener('click',()=>{ if($('#aiS').value&&$('#aiE').value) loadAi($('#aiS').value,$('#aiE').value,($('#aiFocus').value||'').trim(),false); });
   const re=$('#aiRe'); if(re) re.addEventListener('click',()=>{ if($('#aiS').value&&$('#aiE').value) loadAi($('#aiS').value,$('#aiE').value,($('#aiFocus').value||'').trim(),true); });
-  const dr=$('#dailyRep'); if(dr) dr.addEventListener('click',()=>{ const end=$('#aiE').value||gEnd; if(end) loadDailyReport(end); });
 }
 function renderAiSetup(){
   const s=gStart||urRange('7')[0], e=gEnd||urRange('7')[1];
@@ -638,26 +642,44 @@ function dailyReportText(j){
   if(!any) t+=' · (잔액 정보 없음)\n';
   return t.replace(/\n+$/,'')+'\n';
 }
-async function loadDailyReport(end){
+function reportControls(dShow){
+  return '<div class="panel" style="margin-bottom:14px"><div class="ct">📋 일일보고 양식 <span style="font-size:12px;color:var(--tx3)">보고 대상일을 정하고 복사용 텍스트 만들기</span></div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 4px"><span style="font-size:12px;color:var(--tx2);font-weight:600">보고 대상일</span>'
+    +'<input type="date" id="repDate" value="'+dShow+'">'
+    +'<button class="qb" data-repd="yst">어제</button><button class="qb" data-repd="tdy">오늘</button>'
+    +'<button id="repGo">📋 보고 만들기</button>'
+    +'<span style="font-size:11px;color:var(--tx3)">네이버·META·카카오·GFA를 모아 마케터 보고 형식 텍스트로 생성</span></div></div>';
+}
+function reportWire(){
+  $('#report').querySelectorAll('[data-repd]').forEach(b=>b.addEventListener('click',()=>{ const d=new Date(); if(b.dataset.repd==='yst') d.setDate(d.getDate()-1); $('#repDate').value=ymd(d); }));
+  const go=$('#repGo'); if(go) go.addEventListener('click',()=>{ const d=$('#repDate').value; if(d) loadDailyReport(d); });
+}
+function renderReport(){
+  const d=gEnd||ymd(new Date());
+  $('#report').innerHTML=reportControls(d)+'<div class="panel"><div class="state" style="padding:34px;color:var(--tx3);text-align:center">보고 대상일을 정하고 <b style="color:var(--ac)">📋 보고 만들기</b>를 누르세요.<br><span style="font-size:11px">네이버·META·카카오 잔액과 장바구니 전환매출·광고비를 모아 텍스트로 정리합니다.</span></div></div>';
+  reportWire();
+}
+async function loadDailyReport(date0){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const date=String(end).replace(/-/g,'');
-  const ctl=()=>aiControls($('#aiS')?$('#aiS').value:end,end,($('#aiFocus')?$('#aiFocus').value:'')||'',false,'','');
-  $('#ai').innerHTML=ctl()+'<div class="panel"><div class="state" style="padding:34px"><div class="spin"></div>일일보고 데이터 모으는 중… (네이버·META·카카오·GFA)</div></div>'; aiWire();
+  const date=String(date0).replace(/-/g,'');
+  const dShow=date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3');
+  const ctl=()=>reportControls(dShow);
+  $('#report').innerHTML=ctl()+'<div class="panel"><div class="state" style="padding:34px"><div class="spin"></div>일일보고 데이터 모으는 중… (네이버·META·카카오·GFA)</div></div>'; reportWire();
   try{
     const r=await fetch('/api/daily-report?date='+date); const j=await r.json();
     if(!j.ok) throw new Error(j.error||'실패');
     const txt=dailyReportText(j);
     const warn=(j.errors&&j.errors.length)?('<div style="font-size:11px;color:#C2710C;margin-top:8px">⚠️ 일부 매체 미집계: '+j.errors.map(e=>esc(e.platform)).join(', ')+' — 크리테오 승인대기·GFA 수기 등은 정상</div>'):'';
-    $('#ai').innerHTML=ctl()
+    $('#report').innerHTML=ctl()
       +'<div class="panel"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div class="ct" style="margin:0">📋 일일보고 양식 <span style="font-size:12px;color:var(--tx3)">복사해서 메신저·메일에 붙여넣기</span></div><button class="qb" id="drCopy" style="margin-left:auto">📋 복사</button></div>'
       +'<textarea id="drText" readonly style="width:100%;min-height:330px;border:1px solid var(--bd);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.7;font-family:Consolas,monospace;white-space:pre;box-sizing:border-box;background:var(--sf2);color:var(--tx)">'+esc(txt)+'</textarea>'
       +warn+'</div>';
-    aiWire();
+    reportWire();
     const cp=$('#drCopy'); if(cp) cp.addEventListener('click',async()=>{
       try{ await navigator.clipboard.writeText(txt); }catch(_){ const ta=$('#drText'); if(ta){ ta.focus(); ta.select(); try{document.execCommand('copy');}catch(__){} } }
       cp.textContent='✅ 복사됨'; setTimeout(()=>{cp.textContent='📋 복사';},1500);
     });
-  }catch(e){ $('#ai').innerHTML=ctl()+'<div class="panel"><div class="err" style="margin:6px 0">일일보고 생성 실패: '+esc(e.message)+'</div></div>'; aiWire(); }
+  }catch(e){ $('#report').innerHTML=ctl()+'<div class="panel"><div class="err" style="margin:6px 0">일일보고 생성 실패: '+esc(e.message)+'</div></div>'; reportWire(); }
 }
 
 // ── 유입·매출 탭 (Cafe24 Analytics — UTM별 실주문) ──
