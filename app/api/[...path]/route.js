@@ -99,6 +99,47 @@ export async function GET(req) {
       return J({ ok: true, ...r });
     }
 
+    // ── 일일보고(텍스트) 데이터 — 장바구니매출·광고비·잔액 (선택 날짜 기준) ──
+    if (p === '/api/daily-report') {
+      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
+      const dDash = date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+      const [sum, nvConv, gfaQ] = await Promise.all([
+        providers.getAllSummaries(date),
+        naver.getConversionBreakdown(date).catch(() => null),
+        campaigns.query(dDash, dDash).catch(() => null),
+      ]);
+      const rows = sum.rows || [];
+      const erred = new Set((sum.errors || []).map((e) => e.platform));
+      const pick = (re) => rows.filter((r) => re.test(r.platform || ''));
+      const sumSp = (rs) => rs.reduce((a, r) => a + (r.spend || 0), 0);
+      const nv = pick(/^네이버/), mt = pick(/^META/), cr = pick(/criteo|크리테오/i), kk = pick(/카카오/);
+      const gfaT = (gfaQ && gfaQ.totals) || null;
+      const spend = {
+        naver: sumSp(nv), meta: sumSp(mt),
+        criteo: cr.length ? sumSp(cr) : (erred.has('Criteo') ? null : 0),
+        kakao: kk.length ? sumSp(kk) : 0,
+        gfa: gfaT ? Math.round(gfaT.spend || 0) : 0,
+      };
+      spend.total = (spend.naver || 0) + (spend.meta || 0) + (spend.criteo || 0) + (spend.kakao || 0) + (spend.gfa || 0);
+      const metaCart = mt.reduce((a, r) => ({ cnt: a.cnt + (r.conversions || 0), val: a.val + (r.convValue || 0) }), { cnt: 0, val: 0 });
+      const cart = {
+        naver: (nvConv && nvConv.totals) ? { cnt: nvConv.totals.cartCnt || 0, val: nvConv.totals.cartVal || 0 } : null,
+        meta: metaCart,
+        gfa: gfaT ? { cnt: Math.round(gfaT.cart || 0), val: Math.round(gfaT.cartVal || 0) } : null,
+      };
+      const balOf = (rs) => { const r = rs.find((x) => x.balance != null); return r ? r.balance : null; };
+      const metaY = rows.find((r) => /요기보/.test(r.platform || ''));
+      const metaS = rows.find((r) => /샐리필|sally/i.test(r.platform || ''));
+      const balance = {
+        naver: balOf(nv),
+        metaYogibo: metaY ? metaY.balance : null,
+        metaSally: metaS ? metaS.balance : null,
+        kakao: balOf(kk),
+      };
+      return J({ ok: true, date, spend, cart, balance, errors: sum.errors, disabled: sum.disabled });
+    }
+
     // ── GFA 수동/엑셀 데이터 조회 ──
     if (p === '/api/gfa') {
       return J({ ok: true, data: await gfa.getData() });
