@@ -40,4 +40,28 @@ async function kvSet(key, value) {
   return value;
 }
 
-module.exports = { configured, getDb, kvGet, kvSet };
+// 일자별 추이 자동 적재 — 통합표 rows를 daily_stats에 upsert(매체+날짜 단위).
+// backfill(naver/meta)와 매체명이 일치해 중복 없이 dedupe되고, 카카오 등은 신규 적재.
+// 누가 조회할 때마다 그 날짜가 채워져 backfill 수동실행 없이도 매일 쌓임(서버리스 친화).
+async function saveDaily(date, rows) {
+  if (!URI || !Array.isArray(rows) || !rows.length) return;
+  const dt = String(date).replace(/-/g, '');
+  if (!/^\d{8}$/.test(dt)) return;
+  const db = await getDb();
+  const ops = rows
+    .filter((r) => r && r.platform && ((+r.spend || 0) || (+r.convValue || 0) || (+r.conversions || 0) || (+r.imp || 0) || (+r.clk || 0)))
+    .map((r) => ({
+      updateOne: {
+        filter: { platform: r.platform, date: dt },
+        update: { $set: {
+          platform: r.platform, date: dt,
+          spend: Math.round(+r.spend || 0), conv: Math.round(+r.conversions || 0), convValue: Math.round(+r.convValue || 0),
+          imp: Math.round(+r.imp || 0), clk: Math.round(+r.clk || 0), src: 'live', updatedAt: new Date(),
+        } },
+        upsert: true,
+      },
+    }));
+  if (ops.length) await db.collection('daily_stats').bulkWrite(ops, { ordered: false });
+}
+
+module.exports = { configured, getDb, kvGet, kvSet, saveDaily };

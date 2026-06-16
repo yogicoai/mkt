@@ -43,9 +43,10 @@ function pick(arr, type) {
 async function one(acc, date) {
   const since = dash(date);
   const tr = encodeURIComponent(JSON.stringify({ since, until: since }));
-  const ins = await mget(`act_${stripAct(acc.id)}/insights?level=account&time_range=${tr}&fields=spend,actions,action_values`);
+  const ins = await mget(`act_${stripAct(acc.id)}/insights?level=account&time_range=${tr}&fields=spend,impressions,clicks,actions,action_values`);
   const row = (ins.data && ins.data[0]) || {};
   const spend = Math.round(+row.spend || 0); // insights spend = 통화 실제단위
+  const imp = Math.round(+row.impressions || 0), clk = Math.round(+row.clicks || 0);
   const conv = Math.round(pick(row.actions, PURCHASE));
   const rev = Math.round(pick(row.action_values, PURCHASE));
 
@@ -57,7 +58,7 @@ async function one(acc, date) {
     else if (a.balance != null) { balance = minor(a.balance, cur); note = '잔액=미청구액(한도 미설정)'; }
   } catch (_) { /* 잔액 실패는 무시 */ }
 
-  return { platform: acc.platform, spend, conversions: conv, convValue: rev, balance, currency: 'KRW', note };
+  return { platform: acc.platform, spend, conversions: conv, convValue: rev, imp, clk, balance, currency: 'KRW', note };
 }
 
 module.exports = {

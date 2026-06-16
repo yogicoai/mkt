@@ -31,6 +31,7 @@ export async function GET(req) {
       const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
       if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
       const data = await providers.getAllSummaries(date);
+      if (store.configured()) { try { await store.saveDaily(date, data.rows); } catch (_) {} } // 추이 자동 적재(daily_stats)
       return J({ ok: true, ...data });
     }
 
