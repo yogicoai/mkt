@@ -783,7 +783,11 @@ async function load(){
     ]);
     lastSum = (sum && sum.ok) ? sum : null;
     lastStat = j;
-    if(sum && sum.ok) renderPlatforms(sum, (prev&&prev.ok)?prev:null); else $('#platforms').innerHTML='';
+    if(sum && sum.ok){
+      renderPlatforms(sum, (prev&&prev.ok)?prev:null);
+      // 실매출(Cafe24) 대조는 비동기로 — 통합표를 막지 않음
+      fetch('/api/utm?start='+gEnd+'&end='+gEnd).then(r=>r.json()).then(u=>renderRealGap(sum,(u&&u.ok)?u.sales:null)).catch(()=>renderRealGap(sum,null));
+    } else $('#platforms').innerHTML='';
     if(!j.ok) throw new Error(j.error + (j.detail? ' · '+JSON.stringify(j.detail):''));
     $('#acct').textContent = '광고계정 '+j.customerId+' · '+date.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
     render(j);
@@ -823,7 +827,7 @@ function renderPlatforms(d, prev){
     <td>${bal(r.balance)}</td></tr>`; };
   const disabled=(d.disabled||[]).length? `<div style="font-size:12px;color:var(--muted);margin-top:10px">⏳ 미연동(자격증명 대기): <b>${d.disabled.join(', ')}</b></div>`:'';
   const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
-  $('#platforms').innerHTML=kpis+`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
+  $('#platforms').innerHTML=kpis+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
     <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th style="text-align:left">진단·조언</th><th>잔액</th></tr></thead>
     <tbody>${rows.map(tr).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
     <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td></td><td>${won(sum.bal)}</td></tr>
@@ -832,6 +836,32 @@ function renderPlatforms(d, prev){
     ${disabled}${errs}</div>`;
 }
 
+// 🎯 실매출(Cafe24 UTM 유입) 기준 진짜 ROAS + 매체 과대보고율
+function renderRealGap(sum, sales){
+  const el=$('#realgap'); if(!el) return;
+  const rows=(sum&&sum.rows)||[];
+  const adSpend=rows.reduce((a,r)=>a+(r.spend||0),0);
+  const adRev=rows.reduce((a,r)=>a+(r.convValue||0),0);
+  const mediaRoas=adSpend?Math.round(adRev/adSpend*100):0;
+  if(!sales){ el.innerHTML='<div class="panel" style="margin:0 0 14px"><h2>🎯 실매출 기준 진짜 ROAS</h2><div style="color:var(--tx3);font-size:12.5px;padding:4px 0">실매출(Cafe24)을 불러오지 못했어요 — <b>유입·매출 탭</b>에서 확인하세요.</div></div>'; return; }
+  const vis=(sales.byUtm||[]).filter(u=>!HIDE_MEDIUMS.includes(u.medium));
+  const tagRev=vis.reduce((x,u)=>x+(u.revenue||0),0);
+  const realRoas=adSpend?Math.round(tagRev/adSpend*100):0;
+  let over;
+  if(tagRev<=0){ over='<span style="color:var(--tx3);font-size:14px">실매출 0 (UTM 미태깅·당일 집계 전)</span>'; }
+  else { const m=adRev/tagRev;
+    if(m>=1.2) over='<span style="color:#E03131;font-weight:800">'+m.toFixed(1)+'배 부풀림</span>';
+    else if(m>=0.8) over='<span style="color:#1B9C5A;font-weight:800">거의 일치</span>';
+    else over='<span style="color:#1B64DA;font-weight:800">오히려 보수적</span>';
+  }
+  el.innerHTML='<div class="panel" style="margin:0 0 14px"><h2>🎯 실매출 기준 진짜 ROAS <span style="font-size:11px;color:var(--tx3);font-weight:500">(Cafe24 UTM 유입 실주문 기준)</span></h2>'
+    +'<div class="cards">'
+    +'<div class="card"><div class="lbl">매체 보고 ROAS</div><div class="val">'+won(mediaRoas)+'%</div><div class="sub">매체 합산 전환매출 '+won(adRev)+'원</div></div>'
+    +'<div class="card accent"><div class="lbl">🎯 실 ROAS (정산 기준)</div><div class="val">'+won(realRoas)+'%</div><div class="sub">광고 유입 실매출 '+won(tagRev)+'원</div></div>'
+    +'<div class="card"><div class="lbl">과대보고</div><div class="val" style="font-size:20px">'+over+'</div><div class="sub">매체 보고 ÷ 실매출</div></div>'
+    +'</div>'
+    +'<div class="glossary" style="margin:8px 0 0">💡 매체 보고 전환매출은 <b>기여기간·중복집계·장바구니 포함</b>(특히 META는 장바구니 기준)으로 실제 정산 매출보다 부풀려질 수 있어요. <b>예산 의사결정은 실 ROAS로</b> 보세요. ※실매출=Cafe24 UTM 유입 주문(당일은 집계 전일 수 있음).</div></div>';
+}
 function roasClass(r,cost){ if(cost>0&&r===0)return 'na'; if(r>=300)return 'hi'; if(r>=100)return 'mid'; if(cost>0)return 'lo'; return 'na'; }
 // 매체 효율 등급 + 한 줄 조언 (ROAS 기반 자동 신호)
 function effTier(spend, r){
