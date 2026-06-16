@@ -213,7 +213,8 @@
     <span style="color:var(--tx3)">~</span>
     <input type="date" id="pEnd" title="종료일" />
     <button id="pGo">조회</button>
-    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;margin-left:auto">
+    <button id="csvBtn" class="qb" style="margin-left:auto" title="현재 탭의 표를 CSV(엑셀)로 저장">📥 CSV</button>
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;margin-left:10px">
       <input type="checkbox" id="auto"> 60초 자동갱신</label>
     <span id="updated" class="acct" style="margin-left:0"></span>
   </div>
@@ -744,6 +745,30 @@ function shiftYmd(ymd8, days){
   const p=n=>String(n).padStart(2,'0');
   return ''+dt.getFullYear()+p(dt.getMonth()+1)+p(dt.getDate());
 }
+// 현재 탭의 표를 CSV로 내보내기 (회사 공유·보고용 · 엑셀 한글 BOM 포함)
+function exportCSV(){
+  const tab=activeTab();
+  const pane=document.querySelector('.tabpane[data-pane="'+tab+'"]');
+  const tables=pane? pane.querySelectorAll('table') : [];
+  if(!tables.length){ alert('이 탭에는 내보낼 표가 없어요. (먼저 조회하세요)'); return; }
+  const q=s=>{ s=String(s==null?'':s).replace(/\s+/g,' ').trim(); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  let csv='';
+  tables.forEach((t,ti)=>{
+    if(ti>0) csv+='\n';
+    t.querySelectorAll('tr').forEach(tr=>{
+      const cells=[...tr.querySelectorAll('th,td')].map(c=>q(c.textContent));
+      if(cells.some(x=>x!=='')) csv+=cells.join(',')+'\n';
+    });
+  });
+  const blob=new Blob([String.fromCharCode(0xFEFF)+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='mkboard_'+tab+'_'+(gStart||'')+'~'+(gEnd||'')+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+if($('#csvBtn')) $('#csvBtn').addEventListener('click', exportCSV);
+
 async function load(){
   const date = dateEl.value.replace(/-/g,'');
   const _gb=$('#pGo'); if(_gb) _gb.disabled=true;
