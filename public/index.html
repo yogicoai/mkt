@@ -738,19 +738,27 @@ function renderKwRoas(j){
 
 let sortKey='salesAmt', sortDir=-1, lastRows=[];
 
+function shiftYmd(ymd8, days){
+  const y=+ymd8.slice(0,4), m=+ymd8.slice(4,6), d=+ymd8.slice(6,8);
+  const dt=new Date(y, m-1, d); dt.setDate(dt.getDate()+days);
+  const p=n=>String(n).padStart(2,'0');
+  return ''+dt.getFullYear()+p(dt.getMonth()+1)+p(dt.getDate());
+}
 async function load(){
   const date = dateEl.value.replace(/-/g,'');
   const _gb=$('#pGo'); if(_gb) _gb.disabled=true;
   $('#platforms').innerHTML='<div class="state" style="padding:24px"><div class="spin"></div>전 플랫폼 조회 중…</div>';
   content.innerHTML='<div class="state"><div class="spin"></div>네이버 API 조회 중…</div>';
   try{
-    const [sum, j] = await Promise.all([
+    const prevDate = shiftYmd(date, -7); // 7일 전(같은 요일) 대비
+    const [sum, j, prev] = await Promise.all([
       fetch('/api/summary?date='+date).then(r=>r.json()).catch(e=>({ok:false,error:String(e)})),
       fetch('/api/stats?date='+date).then(r=>r.json()),
+      fetch('/api/summary?date='+prevDate).then(r=>r.json()).catch(()=>null),
     ]);
     lastSum = (sum && sum.ok) ? sum : null;
     lastStat = j;
-    if(sum && sum.ok) renderPlatforms(sum); else $('#platforms').innerHTML='';
+    if(sum && sum.ok) renderPlatforms(sum, (prev&&prev.ok)?prev:null); else $('#platforms').innerHTML='';
     if(!j.ok) throw new Error(j.error + (j.detail? ' · '+JSON.stringify(j.detail):''));
     $('#acct').textContent = '광고계정 '+j.customerId+' · '+date.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
     render(j);
@@ -761,11 +769,27 @@ async function load(){
   }finally{ const _gb=$('#pGo'); if(_gb) _gb.disabled=false; }
 }
 
-function renderPlatforms(d){
+function renderPlatforms(d, prev){
   const rows=d.rows||[];
   const roas=(s,r)=> s? Math.round(r/s*100):0;
   const bal=v=> v==null? '<span style="color:#9aa3ad">–</span>' : won(v);
   const sum=rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),conv:a.conv+(r.conversions||0),rev:a.rev+(r.convValue||0),bal:a.bal+(r.balance||0)}),{spend:0,conv:0,rev:0,bal:0});
+  // ── 헤드라인 요약 카드 + 7일 전 대비 ──
+  const p = (prev&&prev.rows) ? prev.rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),conv:a.conv+(r.conversions||0),rev:a.rev+(r.convValue||0)}),{spend:0,conv:0,rev:0}) : null;
+  const dlt=(cur,pv,goodUp)=>{
+    if(!p||pv==null) return '<span style="color:var(--tx3);font-size:11px">비교 데이터 없음</span>';
+    if(pv===0) return cur>0?'<span style="color:#1B9C5A;font-size:11px;font-weight:700">신규 ▲</span> <span style="color:var(--tx3);font-size:10px">vs 7일전</span>':'<span style="color:var(--tx3);font-size:11px">변동 없음</span>';
+    const v=(cur-pv)/pv*100, r=Math.round(v), ar=v>0?'▲':v<0?'▼':'■';
+    const c=goodUp?(v>0?'#1B9C5A':v<0?'#E03131':'var(--tx3)'):'var(--tx3)';
+    return `<span style="color:${c};font-size:11px;font-weight:700">${ar} ${Math.abs(r)}%</span> <span style="color:var(--tx3);font-size:10px">vs 7일전</span>`;
+  };
+  const curRoas=roas(sum.spend,sum.rev), prevRoas=p?roas(p.spend,p.rev):null;
+  const kpis=`<div class="cards">
+    <div class="card"><div class="lbl">총 광고비</div><div class="val">${won(sum.spend)}<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">${dlt(sum.spend,p?p.spend:null,false)}</div></div>
+    <div class="card accent"><div class="lbl">총 전환매출 <span style="font-weight:500;color:var(--tx3);font-size:11px">(매체 보고)</span></div><div class="val">${won(sum.rev)}<span style="font-size:14px">원</span></div><div class="sub">${dlt(sum.rev,p?p.rev:null,true)}</div></div>
+    <div class="card"><div class="lbl">통합 ROAS</div><div class="val" style="color:var(--green-d)">${won(curRoas)}%</div><div class="sub">${dlt(curRoas,prevRoas,true)}</div></div>
+    <div class="card"><div class="lbl">총 전환수</div><div class="val">${won(sum.conv)}<span style="font-size:14px;color:var(--muted)">건</span></div><div class="sub">${dlt(sum.conv,p?p.conv:null,true)}</div></div>
+  </div>`;
   const tr=r=>{ const R=roas(r.spend,r.convValue), e=effTier(r.spend,R);
     return `<tr><td><b>${r.platform}</b>${r.note?` <span style="font-size:11px;color:#9aa3ad">${r.note}</span>`:''}</td>
     <td>${won(r.spend)}</td><td>${won(r.conversions)}</td><td>${won(r.convValue)}</td>
@@ -774,7 +798,7 @@ function renderPlatforms(d){
     <td>${bal(r.balance)}</td></tr>`; };
   const disabled=(d.disabled||[]).length? `<div style="font-size:12px;color:var(--muted);margin-top:10px">⏳ 미연동(자격증명 대기): <b>${d.disabled.join(', ')}</b></div>`:'';
   const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
-  $('#platforms').innerHTML=`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
+  $('#platforms').innerHTML=kpis+`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
     <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th style="text-align:left">진단·조언</th><th>잔액</th></tr></thead>
     <tbody>${rows.map(tr).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
     <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td></td><td>${won(sum.bal)}</td></tr>
