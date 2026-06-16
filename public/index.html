@@ -236,6 +236,7 @@
       &nbsp;|&nbsp; 🔒 API 키·서명은 <b>서버에서만</b> 처리(브라우저 비노출)
     </div>
     <div id="platforms"></div>
+    <div id="pacing"></div>
     <div id="gfa"></div>
     <div id="trend"></div>
   </div>
@@ -787,6 +788,7 @@ async function load(){
       renderPlatforms(sum, (prev&&prev.ok)?prev:null);
       // 실매출(Cafe24) 대조는 비동기로 — 통합표를 막지 않음
       fetch('/api/utm?start='+gEnd+'&end='+gEnd).then(r=>r.json()).then(u=>renderRealGap(sum,(u&&u.ok)?u.sales:null)).catch(()=>renderRealGap(sum,null));
+      renderPacing();
     } else $('#platforms').innerHTML='';
     if(!j.ok) throw new Error(j.error + (j.detail? ' · '+JSON.stringify(j.detail):''));
     $('#acct').textContent = '광고계정 '+j.customerId+' · '+date.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
@@ -883,6 +885,43 @@ function renderRealGap(sum, sales){
     +'<div class="card"><div class="lbl">과대보고</div><div class="val" style="font-size:20px">'+over+'</div><div class="sub">매체 보고 ÷ 실매출</div></div>'
     +'</div>'
     +'<div class="glossary" style="margin:8px 0 0">💡 매체 보고 전환매출은 <b>기여기간·중복집계·장바구니 포함</b>(특히 META는 장바구니 기준)으로 실제 정산 매출보다 부풀려질 수 있어요. <b>예산 의사결정은 실 ROAS로</b> 보세요. ※실매출=Cafe24 UTM 유입 주문(당일은 집계 전일 수 있음).</div></div>';
+}
+// ④ 예산 페이싱 — 월 예산 대비 이번 달 누적 광고비 소진율·월말 예상 (daily_stats 기준)
+async function renderPacing(){
+  const el=$('#pacing'); if(!el) return;
+  const now=new Date(), y=now.getFullYear(), mo=now.getMonth(), dim=new Date(y,mo+1,0).getDate(), dayN=now.getDate();
+  const pz=n=>String(n).padStart(2,'0');
+  const since=''+y+pz(mo+1)+'01', until=''+y+pz(mo+1)+pz(dayN);
+  let budget=0, mtd=0;
+  try{ const b=await (await fetch('/api/budget')).json(); budget=(b&&b.amount)||0; }catch(_){}
+  try{ const t=await (await fetch('/api/trend?since='+since+'&until='+until)).json(); if(t&&t.series&&t.series.spend) mtd=t.series.spend.reduce((a,x)=>a+(x||0),0); }catch(_){}
+  const daily=dayN?Math.round(mtd/dayN):0, proj=daily*dim;
+  const useRate=budget?Math.round(mtd/budget*100):0, projRate=budget?Math.round(proj/budget*100):0;
+  let verdict='', vcolor='var(--tx3)';
+  if(budget>0){ if(projRate>105){verdict='🔴 예산 초과 페이스';vcolor='#E03131';} else if(projRate>=95){verdict='🟡 빠듯함';vcolor='#C2710C';} else {verdict='🟢 여유 있음';vcolor='#1B9C5A';} }
+  const barW=Math.min(useRate,100), barColor=useRate>100?'#E03131':(useRate>=80?'#C2710C':'#1B64DA');
+  el.innerHTML='<div class="panel"><h2>📅 예산 페이싱 <span style="font-size:11px;color:var(--tx3);font-weight:500">('+y+'.'+pz(mo+1)+' · '+dayN+'/'+dim+'일 경과)</span></h2>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:'+(budget?'12px':'4px')+'">'
+      +'<span style="font-size:12.5px;color:var(--tx2);font-weight:600">월 광고예산</span>'
+      +'<input type="number" id="budgetIn" value="'+(budget||'')+'" placeholder="예: 5000000" style="width:140px;font-size:13px;padding:6px 9px;border:1px solid var(--bd);border-radius:8px">'
+      +'<span style="font-size:12px;color:var(--tx3)">원</span>'
+      +'<button id="budgetSave" class="qb" style="font-size:12px">저장</button>'
+      +'<span id="budgetMsg" style="font-size:11px;color:var(--tx3)"></span>'
+    +'</div>'
+    +(budget>0?(
+      '<div style="height:14px;background:var(--sf2);border-radius:8px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:'+barW+'%;background:'+barColor+';transition:.3s"></div></div>'
+      +'<div class="cards">'
+        +'<div class="card"><div class="lbl">이번 달 누적 광고비</div><div class="val">'+won(mtd)+'<span style="font-size:13px;color:var(--muted)">원</span></div><div class="sub">예산 대비 '+useRate+'% 소진</div></div>'
+        +'<div class="card"><div class="lbl">일평균 → 월말 예상</div><div class="val" style="font-size:17px">'+won(daily)+' → '+won(proj)+'</div><div class="sub">월말 예상 예산 대비 '+projRate+'%</div></div>'
+        +'<div class="card"><div class="lbl">페이스 판정</div><div class="val" style="font-size:16px;color:'+vcolor+'">'+verdict+'</div><div class="sub">예상 '+(proj>budget?('초과 '+won(proj-budget)):('여유 '+won(budget-proj)))+'원</div></div>'
+      +'</div>'
+    ):'<div style="color:var(--tx3);font-size:12.5px;padding:2px 0">월 광고예산을 입력·저장하면 <b>소진율·월말 예상·초과 여부</b>를 보여줘요.</div>')
+    +'<div class="glossary" style="margin:8px 0 0">💡 누적 광고비는 <b>일자별 추이(daily_stats)</b> 합산이에요. 이번 달 아직 조회·적재 안 된 날이 있으면 실제보다 적게 나올 수 있어요(매일 한 번 열어두면 자동으로 채워져요).</div></div>';
+  const bs=$('#budgetSave'); if(bs) bs.addEventListener('click',async()=>{
+    const v=Math.round(+(($('#budgetIn')||{}).value||0)), msg=$('#budgetMsg'); if(msg) msg.textContent='저장 중…';
+    try{ const r=await fetch('/api/budget',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:v})}); const j=await r.json(); if(!j.ok) throw new Error(j.error||'실패'); renderPacing(); }
+    catch(e){ if(msg) msg.textContent='실패: '+e.message; }
+  });
 }
 function roasClass(r,cost){ if(cost>0&&r===0)return 'na'; if(r>=300)return 'hi'; if(r>=100)return 'mid'; if(cost>0)return 'lo'; return 'na'; }
 // 매체 효율 등급 + 한 줄 조언 (ROAS 기반 자동 신호)

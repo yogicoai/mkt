@@ -65,6 +65,12 @@ export async function GET(req) {
       return J({ ok: true, dates, series, rowCount: docs.length });
     }
 
+    // ── 월 광고예산 조회 (예산 페이싱) ──
+    if (p === '/api/budget') {
+      const b = store.configured() ? await store.kvGet('monthly-budget', { amount: 0 }) : { amount: 0 };
+      return J({ ok: true, amount: (b && b.amount) || 0 });
+    }
+
     // ── Cafe24 유입/UTM별 매출 ──
     if (p === '/api/utm') {
       if (!cafe24.enabled()) return J({ ok: false, error: 'Cafe24 토큰 소스 미설정 (CAFE24_TOKEN_URI/CAFE24_MALL_ID)' }, 400);
@@ -263,6 +269,14 @@ export async function POST(req) {
       const d = await req.json().catch(() => ({}));
       const r = d.all ? await campaigns.clearAll() : await campaigns.clearRange(d.start, d.end);
       return J({ ok: true, ...r });
+    }
+
+    // ── 월 광고예산 저장 (예산 페이싱) ──
+    if (p === '/api/budget') {
+      const d = await req.json().catch(() => ({}));
+      const amount = Math.round(+d.amount || 0);
+      await store.kvSet('monthly-budget', { amount });
+      return J({ ok: true, amount });
     }
 
     // ── GFA 수동 입력(월별) ──
