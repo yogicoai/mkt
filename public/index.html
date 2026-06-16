@@ -819,6 +819,28 @@ function renderPlatforms(d, prev){
     <div class="card"><div class="lbl">통합 ROAS</div><div class="val" style="color:var(--green-d)">${won(curRoas)}%</div><div class="sub">${dlt(curRoas,prevRoas,true)}</div></div>
     <div class="card"><div class="lbl">총 전환수</div><div class="val">${won(sum.conv)}<span style="font-size:14px;color:var(--muted)">건</span></div><div class="sub">${dlt(sum.conv,p?p.conv:null,true)}</div></div>
   </div>`;
+  // ⑤⑥ 자동 진단 — 이상 경고 + 효자/부진 매체
+  const prevByPlat={}; if(prev&&prev.rows) prev.rows.forEach(r=>{prevByPlat[r.platform]=r;});
+  const alerts=[];
+  rows.forEach(r=>{
+    if(r.spend>0 && (r.conversions||0)===0) alerts.push('🔴 <b>'+r.platform+'</b> 전환 0 — 광고비 '+won(r.spend)+'원');
+    if(r.balance!=null && r.balance>0 && r.spend>0 && r.balance<r.spend) alerts.push('⚠️ <b>'+r.platform+'</b> 잔액 부족 — '+won(r.balance)+'원 (1일 소진 미만)');
+    const pr=prevByPlat[r.platform];
+    if(pr){
+      if(pr.spend>0 && r.spend>pr.spend*1.8) alerts.push('📈 <b>'+r.platform+'</b> 광고비 급증 +'+Math.round((r.spend/pr.spend-1)*100)+'% (7일전 대비)');
+      if(pr.convValue>0 && r.spend>0 && r.convValue<pr.convValue*0.5) alerts.push('📉 <b>'+r.platform+'</b> 매출 급락 '+Math.round((r.convValue/pr.convValue-1)*100)+'% (7일전 대비)');
+    }
+  });
+  const act=rows.filter(r=>r.spend>0).map(r=>({platform:r.platform,spend:r.spend,R:roas(r.spend,r.convValue)}));
+  const win=act.filter(r=>r.R>0).sort((a,b)=>b.R-a.R)[0];
+  const lose=act.filter(r=>r.spend>=10000).sort((a,b)=>a.R-b.R)[0];
+  let actHtml='';
+  if(win) actHtml+='<div>🟢 효자: <b>'+win.platform+'</b> ROAS '+won(win.R)+'% → 유지·증액 검토</div>';
+  if(lose && (!win||lose.platform!==win.platform)) actHtml+='<div style="margin-top:3px">🔴 부진: <b>'+lose.platform+'</b> ROAS '+won(lose.R)+'% → 축소·소재 점검</div>';
+  const diag=(alerts.length||actHtml)?('<div class="panel" style="margin:0 0 14px"><h2>⚡ 오늘의 자동 진단</h2>'
+    +(alerts.length?'<div style="display:flex;flex-direction:column;gap:4px;font-size:12.5px">'+alerts.map(a=>'<div style="background:#FFF3F3;border:1px solid #FAD4D4;border-radius:8px;padding:6px 10px">'+a+'</div>').join('')+'</div>':'<div style="color:#1B9C5A;font-size:12.5px;font-weight:600">✅ 경고 없음 — 전환·잔액·증감 정상</div>')
+    +(actHtml?'<div style="margin-top:8px;font-size:12.5px;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:8px 10px">'+actHtml+'</div>':'')
+    +'</div>'):'';
   const tr=r=>{ const R=roas(r.spend,r.convValue), e=effTier(r.spend,R);
     return `<tr><td><b>${r.platform}</b>${r.note?` <span style="font-size:11px;color:#9aa3ad">${r.note}</span>`:''}</td>
     <td>${won(r.spend)}</td><td>${won(r.conversions)}</td><td>${won(r.convValue)}</td>
@@ -827,7 +849,7 @@ function renderPlatforms(d, prev){
     <td>${bal(r.balance)}</td></tr>`; };
   const disabled=(d.disabled||[]).length? `<div style="font-size:12px;color:var(--muted);margin-top:10px">⏳ 미연동(자격증명 대기): <b>${d.disabled.join(', ')}</b></div>`:'';
   const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
-  $('#platforms').innerHTML=kpis+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
+  $('#platforms').innerHTML=kpis+diag+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
     <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th style="text-align:left">진단·조언</th><th>잔액</th></tr></thead>
     <tbody>${rows.map(tr).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
     <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td></td><td>${won(sum.bal)}</td></tr>
