@@ -860,7 +860,7 @@ function renderPlatforms(d, prev){
     ${disabled}${errs}</div>`;
 }
 
-// 🎯 실매출(Cafe24 UTM 유입) 기준 진짜 ROAS + 매체 과대보고율
+// 🎯 실매출(Cafe24 UTM 유입) 기준 진짜 ROAS + 매체 보고와의 집계 기준 차이
 function renderRealGap(sum, sales){
   const el=$('#realgap'); if(!el) return;
   const rows=(sum&&sum.rows)||[];
@@ -874,17 +874,17 @@ function renderRealGap(sum, sales){
   let over;
   if(tagRev<=0){ over='<span style="color:var(--tx3);font-size:14px">실매출 0 (UTM 미태깅·당일 집계 전)</span>'; }
   else { const m=adRev/tagRev;
-    if(m>=1.2) over='<span style="color:#E03131;font-weight:800">'+m.toFixed(1)+'배 부풀림</span>';
+    if(m>=1.2) over='<span style="color:#F08C00;font-weight:800">매체 '+m.toFixed(1)+'배</span>';
     else if(m>=0.8) over='<span style="color:#1B9C5A;font-weight:800">거의 일치</span>';
-    else over='<span style="color:#1B64DA;font-weight:800">오히려 보수적</span>';
+    else over='<span style="color:#1B64DA;font-weight:800">매체가 더 보수적</span>';
   }
   el.innerHTML='<div class="panel" style="margin:0 0 14px"><h2>🎯 실매출 기준 진짜 ROAS <span style="font-size:11px;color:var(--tx3);font-weight:500">(Cafe24 UTM 유입 실주문 기준)</span></h2>'
     +'<div class="cards">'
     +'<div class="card"><div class="lbl">매체 보고 ROAS</div><div class="val">'+won(mediaRoas)+'%</div><div class="sub">매체 합산 전환매출 '+won(adRev)+'원</div></div>'
     +'<div class="card accent"><div class="lbl">🎯 실 ROAS (정산 기준)</div><div class="val">'+won(realRoas)+'%</div><div class="sub">광고 유입 실매출 '+won(tagRev)+'원</div></div>'
-    +'<div class="card"><div class="lbl">과대보고</div><div class="val" style="font-size:20px">'+over+'</div><div class="sub">매체 보고 ÷ 실매출</div></div>'
+    +'<div class="card"><div class="lbl">집계 기준 차이</div><div class="val" style="font-size:20px">'+over+'</div><div class="sub">기여기간·중복집계 차이</div></div>'
     +'</div>'
-    +'<div class="glossary" style="margin:8px 0 0">💡 매체 보고 전환매출은 <b>기여기간·중복집계·장바구니 포함</b>(특히 META는 장바구니 기준)으로 실제 정산 매출보다 부풀려질 수 있어요. <b>예산 의사결정은 실 ROAS로</b> 보세요. ※실매출=Cafe24 UTM 유입 주문(당일은 집계 전일 수 있음).</div></div>';
+    +'<div class="glossary" style="margin:8px 0 0">💡 매체 보고 전환매출과 Cafe24 실매출은 <b>기여기간·중복집계·장바구니 포함</b>(특히 META는 장바구니 기준) 등 <b>집계 기준이 달라</b> 차이가 날 수 있어요. 어느 쪽이 틀린 게 아니라 <b>보는 기준이 다른 것</b>이며, 예산 의사결정 땐 <b>실 ROAS</b>를 함께 보면 좋아요. ※실매출=Cafe24 UTM 유입 주문(당일은 집계 전일 수 있음).</div></div>';
 }
 // ④ 예산 페이싱 — 월 예산 대비 이번 달 누적 광고비 소진율·월말 예상 (daily_stats 기준)
 async function renderPacing(){
