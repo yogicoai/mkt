@@ -840,6 +840,7 @@ if($('#csvBtn')) $('#csvBtn').addEventListener('click', exportCSV);
 
 async function load(){
   const date = dateEl.value.replace(/-/g,'');
+  const startYmd = (gStart||dateEl.value).replace(/-/g,''); // 네이버 상세는 기간 합산
   const _gb=$('#pGo'); if(_gb) _gb.disabled=true;
   $('#platforms').innerHTML='<div class="state" style="padding:24px"><div class="spin"></div>전 플랫폼 조회 중…</div>';
   content.innerHTML='<div class="state"><div class="spin"></div>네이버 API 조회 중…</div>';
@@ -847,7 +848,7 @@ async function load(){
     const prevDate = shiftYmd(date, -7); // 7일 전(같은 요일) 대비
     const [sum, j, prev] = await Promise.all([
       fetch('/api/summary?date='+date).then(r=>r.json()).catch(e=>({ok:false,error:String(e)})),
-      fetch('/api/stats?date='+date).then(r=>r.json()),
+      fetch('/api/stats?start='+startYmd+'&end='+date).then(r=>r.json()),
       fetch('/api/summary?date='+prevDate).then(r=>r.json()).catch(()=>null),
     ]);
     lastSum = (sum && sum.ok) ? sum : null;
@@ -858,7 +859,8 @@ async function load(){
       fetch('/api/utm?start='+gEnd+'&end='+gEnd).then(r=>r.json()).then(u=>renderRealGap(sum,(u&&u.ok)?u.sales:null)).catch(()=>renderRealGap(sum,null));
     } else $('#platforms').innerHTML='';
     if(!j.ok) throw new Error(j.error + (j.detail? ' · '+JSON.stringify(j.detail):''));
-    $('#acct').textContent = '광고계정 '+j.customerId+' · '+date.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
+    const _dl=s=>s.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
+    $('#acct').textContent = '광고계정 '+j.customerId+' · '+(startYmd!==date? (_dl(startYmd)+' ~ '+_dl(date)) : _dl(date));
     render(j);
     if(gStart!==gEnd){ const note='<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">📅 <b>전체·네이버</b> 탭은 하루 단위라 선택 기간의 <b>마지막 날('+gEnd+')</b> 기준이에요. 기간 비교는 META·유입·GFA 탭에서 보세요.</div>'; content.insertAdjacentHTML('afterbegin',note); const pf=$('#platforms'); if(pf) pf.insertAdjacentHTML('afterbegin',note); }
     $('#updated').textContent = '갱신 '+new Date().toLocaleTimeString('ko-KR');
@@ -989,7 +991,7 @@ function render(j){
   const buyRoasTot=t.salesAmt? Math.round(sumBuyVal/t.salesAmt*100):0;
 
   content.innerHTML = `
-    ${j.convBuilt===false?(gEnd===ymd(new Date())?'<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">ℹ️ <b>오늘(당일)</b>은 네이버가 구매·장바구니 전환데이터를 아직 집계하지 않아요(당일 전환보고서 미제공). 상단에서 <b>어제</b>로 보면 구매·장바구니가 나옵니다. <span style="color:var(--tx3)">(노출·클릭·광고비는 오늘도 정상)</span></div>':'<div class="err" style="margin:0 0 10px">⚠ 구매 전환 보고서 생성이 지연되고 있어요 — 잠시 후 다시 조회하세요.</div>'):''}
+    ${j.convBuilt===false?(gEnd===ymd(new Date())?'<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">ℹ️ <b>오늘(당일)</b>은 네이버가 구매·장바구니 전환데이터를 아직 집계하지 않아요(당일 전환보고서 미제공). 상단에서 <b>어제</b>로 보면 구매·장바구니가 나옵니다. <span style="color:var(--tx3)">(노출·클릭·광고비는 오늘도 정상)</span></div>':'<div class="err" style="margin:0 0 10px">⚠ 구매 전환 보고서 생성이 지연되고 있어요 — 잠시 후 다시 조회하세요.</div>'):(j.convDaysMissing>0?'<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">ℹ️ 기간 중 <b>'+j.convDaysMissing+'일</b>(오늘 등)은 네이버 당일 전환보고서 미제공으로 <b>구매·장바구니 분해</b>에서 빠졌어요. <span style="color:var(--tx3)">(광고비·노출·클릭·총전환은 전체 기간 정상)</span></div>':'')}
     <div class="cards">
       <div class="card accent"><div class="lbl">💰 비즈머니 잔액</div><div class="val">${won(j.bizmoney? j.bizmoney.bizmoney:0)}<span style="font-size:14px">원</span></div><div class="sub">${j.bizmoney&&j.bizmoney.budgetLock?'⚠️ 예산잠금 상태':'네이버 광고 잔액'}</div></div>
       <div class="card"><div class="lbl">광고비 (소진)</div><div class="val">${won(t.salesAmt)}<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">노출발생 ${t.activeCount} / 전체 ${t.totalCount}개</div></div>
@@ -1005,7 +1007,7 @@ function render(j){
     <div class="panel"><h2>캠페인별 광고비 · 구매매출</h2><div class="chart-box"><canvas id="chart"></canvas></div></div>
 
     <div class="panel">
-      <h2>캠페인 상세 (노출 발생 ${lastRows.length}개 · 헤더 클릭 정렬)</h2>
+      <h2>캠페인 상세 ${(j.start&&j.end&&j.start!==j.end)?('<span style="font-size:12px;color:var(--tx3);font-weight:500">('+j.start.replace(/(\d{4})(\d{2})(\d{2})/,'$2.$3')+'~'+j.end.replace(/(\d{4})(\d{2})(\d{2})/,'$2.$3')+' 합산)</span> '):''}(노출 발생 ${lastRows.length}개 · 헤더 클릭 정렬)</h2>
       <table>
         <thead><tr>
           <th data-k="name">캠페인</th>
@@ -1092,9 +1094,9 @@ async function toggleKeywords(tr){
   const det=document.createElement('tr'); det.className='kw-detail';
   det.innerHTML='<td colspan="12" style="background:var(--sf2);padding:12px 16px"><div class="state" style="padding:14px"><div class="spin"></div>광고그룹 불러오는 중…</div></td>';
   tr.after(det);
-  const date=dateEl.value.replace(/-/g,'');
+  const s=(gStart||dateEl.value).replace(/-/g,''), e=dateEl.value.replace(/-/g,'');
   try{
-    const r=await fetch('/api/adgroups?campaign='+encodeURIComponent(id)+'&date='+date);
+    const r=await fetch('/api/adgroups?campaign='+encodeURIComponent(id)+'&start='+s+'&end='+e);
     const j=await r.json();
     if(!j.ok) throw new Error(j.error||'실패');
     det.firstChild.innerHTML = agTable(j,name,tp);
@@ -1110,10 +1112,10 @@ async function toggleAgKw(ag){
   const det=document.createElement('tr'); det.className='ag-kw';
   det.innerHTML='<td colspan="12" style="background:#fff;padding:8px 8px 10px 22px"><div class="state" style="padding:10px"><div class="spin"></div>'+(isShop?'상품':'키워드')+' 불러오는 중…</div></td>';
   ag.after(det);
-  const date=dateEl.value.replace(/-/g,'');
+  const s=(gStart||dateEl.value).replace(/-/g,''), e=dateEl.value.replace(/-/g,'');
   const ep = isShop ? '/api/products' : '/api/keywords';
   try{
-    const r=await fetch(ep+'?adgroup='+encodeURIComponent(id)+'&date='+date);
+    const r=await fetch(ep+'?adgroup='+encodeURIComponent(id)+'&start='+s+'&end='+e);
     const j=await r.json();
     if(!j.ok) throw new Error(j.error||'실패');
     det.firstChild.innerHTML = isShop ? prodTable(j,name) : kwTable(j,name);

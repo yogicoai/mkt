@@ -102,11 +102,13 @@ async function getCampaigns() {
  */
 // 동시 호출 dedup: 같은 날짜 요청이 진행 중이면 같은 Promise 공유 (통합표+상세 중복 방지)
 const _statsInflight = new Map();
-async function getCampaignStats(dateStr) {
-  if (_statsInflight.has(dateStr)) return _statsInflight.get(dateStr);
-  const p = _computeCampaignStats(dateStr);
-  _statsInflight.set(dateStr, p);
-  try { return await p; } finally { _statsInflight.delete(dateStr); }
+async function getCampaignStats(startStr, endStr) {
+  const s = String(startStr).replace(/-/g, ''), e = String(endStr || startStr).replace(/-/g, '');
+  const key = s + '_' + e;
+  if (_statsInflight.has(key)) return _statsInflight.get(key);
+  const p = (s === e) ? _computeCampaignStats(startStr) : _computeCampaignStatsRange(startStr, endStr);
+  _statsInflight.set(key, p);
+  try { return await p; } finally { _statsInflight.delete(key); }
 }
 
 async function _computeCampaignStats(dateStr) {
@@ -150,6 +152,43 @@ async function _computeCampaignStats(dateStr) {
   };
 
   return { date: dateStr, rows, totals };
+}
+
+// 기간(시작≠끝) 캠페인 합산 — 캠페인 /stats는 timeRange만으론 합산이 안 돼 timeIncrement='1'(일별) 후 합산(검증됨).
+async function _computeCampaignStatsRange(startStr, endStr) {
+  const since = dash(startStr), until = dash(endStr);
+  const camps = await getCampaigns();
+  const rows = await mapLimit(camps, 5, async (c) => {
+    const a = { impCnt: 0, clkCnt: 0, salesAmt: 0, ccnt: 0, convAmt: 0 };
+    try {
+      const out = await api('GET', '/stats', {
+        query: { id: c.nccCampaignId, fields: JSON.stringify(FIELDS), timeRange: JSON.stringify({ since, until }), timeIncrement: '1' },
+      });
+      const arr = (out && out.data) ? out.data : (Array.isArray(out) ? out : []);
+      for (const m of arr) { a.impCnt += +m.impCnt || 0; a.clkCnt += +m.clkCnt || 0; a.salesAmt += +m.salesAmt || 0; a.ccnt += +m.ccnt || 0; a.convAmt += +m.convAmt || 0; }
+    } catch (_) { /* 실패 캠페인은 0 처리 */ }
+    return {
+      id: c.nccCampaignId, name: c.name, tp: c.campaignTp, status: c.status,
+      impCnt: a.impCnt, clkCnt: a.clkCnt,
+      ctr: a.impCnt ? +(a.clkCnt / a.impCnt * 100).toFixed(4) : 0,
+      cpc: a.clkCnt ? Math.round(a.salesAmt / a.clkCnt) : 0,
+      salesAmt: a.salesAmt, ccnt: a.ccnt, convAmt: a.convAmt,
+      ror: a.salesAmt ? Math.round(a.convAmt / a.salesAmt * 100) : 0,
+    };
+  });
+  const active = rows.filter((r) => r.impCnt > 0);
+  const sum = active.reduce((acc, r) => ({
+    impCnt: acc.impCnt + r.impCnt, clkCnt: acc.clkCnt + r.clkCnt, salesAmt: acc.salesAmt + r.salesAmt,
+    ccnt: acc.ccnt + r.ccnt, convAmt: acc.convAmt + r.convAmt,
+  }), { impCnt: 0, clkCnt: 0, salesAmt: 0, ccnt: 0, convAmt: 0 });
+  const totals = {
+    ...sum,
+    ctr: sum.impCnt ? +(sum.clkCnt / sum.impCnt * 100).toFixed(2) : 0,
+    cpc: sum.clkCnt ? Math.round(sum.salesAmt / sum.clkCnt) : 0,
+    ror: sum.salesAmt ? Math.round(sum.convAmt / sum.salesAmt * 100) : 0,
+    activeCount: active.length, totalCount: rows.length,
+  };
+  return { date: startStr, start: startStr, end: endStr, rows, totals };
 }
 
 // 비즈머니(광고비 잔액) 조회
@@ -202,6 +241,35 @@ async function getConversionBreakdown(date) {
   } finally { _convInflight.delete(date); }
 }
 
+// 기간 구매/장바구니 분해 — 일별 리포트를 합산. 오늘·미래는 네이버가 당일 리포트를 안 줘서 제외(검증: 당일 POST 400).
+async function getConversionBreakdownRange(startStr, endStr) {
+  const start = String(startStr).replace(/-/g, ''), end = String(endStr || startStr).replace(/-/g, '');
+  if (start === end) return getConversionBreakdown(start);
+  const now = new Date();
+  const today = '' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const mk = (s) => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
+  const days = [];
+  for (let d = mk(start); d <= mk(end); d.setDate(d.getDate() + 1)) {
+    const ds = '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    if (ds < today) days.push(ds); // 오늘·미래 제외(리포트 미제공)
+  }
+  const results = await mapLimit(days, 4, (ds) => getConversionBreakdown(ds).catch(() => null));
+  const byCampaign = {}; const totals = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
+  let daysBuilt = 0, daysMissing = 0;
+  for (const r of results) {
+    if (!r || !r.byCampaign) { daysMissing++; continue; }
+    daysBuilt++;
+    for (const cid of Object.keys(r.byCampaign)) {
+      const o = r.byCampaign[cid];
+      const t = byCampaign[cid] || (byCampaign[cid] = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 });
+      t.buyCnt += o.buyCnt; t.buyVal += o.buyVal; t.cartCnt += o.cartCnt; t.cartVal += o.cartVal;
+    }
+    totals.buyCnt += r.totals.buyCnt; totals.buyVal += r.totals.buyVal;
+    totals.cartCnt += r.totals.cartCnt; totals.cartVal += r.totals.cartVal;
+  }
+  return { status: daysBuilt ? 'BUILT' : 'NONE', byCampaign, totals, daysBuilt, daysMissing };
+}
+
 // 장바구니 전환(통합표용) — 위 분해에서 파생 (기존 시그니처 유지: conversions=장바구니수, convValue=장바구니매출)
 async function getCartConversions(date) {
   const d = await getConversionBreakdown(date);
@@ -210,8 +278,8 @@ async function getCartConversions(date) {
 }
 
 // 캠페인의 키워드별 효율 (adgroups→keywords→/stats). ids는 콤마구분.
-async function getKeywordStats(campaignId, dateStr) {
-  const since = dash(dateStr);
+async function getKeywordStats(campaignId, startStr, endStr) {
+  const since = dash(startStr), until = dash(endStr || startStr);
   const CAP = 3000; // 초대형 캠페인(세부키워드 등) 안전 상한
   const ags = await api('GET', '/ncc/adgroups', { query: { nccCampaignId: campaignId } });
   const lists = await mapLimit(ags, 5, (ag) =>
@@ -233,7 +301,7 @@ async function getKeywordStats(campaignId, dateStr) {
     const ids = batch.map((k) => k.nccKeywordId).join(',');
     try {
       const out = await api('GET', '/stats', {
-        query: { ids, fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until: since }) },
+        query: { ids, fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until }) },
       });
       (out.data || []).forEach((r) => { if (r.id) stat[r.id] = r; });
     } catch (_) { /* 배치 실패 무시 */ }
@@ -241,15 +309,16 @@ async function getKeywordStats(campaignId, dateStr) {
 
   const rows = kws.map((k) => {
     const s = stat[k.nccKeywordId] || {};
+    const imp = +s.impCnt || 0, clk = +s.clkCnt || 0, spend = +s.salesAmt || 0, conv = +s.convAmt || 0;
     return {
       keyword: k.keyword,
-      impCnt: +s.impCnt || 0, clkCnt: +s.clkCnt || 0, ctr: +s.ctr || 0, cpc: +s.cpc || 0,
-      salesAmt: +s.salesAmt || 0, ccnt: +s.ccnt || 0, convAmt: +s.convAmt || 0,
-      ror: +s.ror || 0, avgRnk: +s.avgRnk || 0,
+      impCnt: imp, clkCnt: clk, ctr: imp ? +(clk / imp * 100).toFixed(2) : 0, cpc: clk ? Math.round(spend / clk) : 0,
+      salesAmt: spend, ccnt: +s.ccnt || 0, convAmt: conv,
+      ror: spend ? Math.round(conv / spend * 100) : 0, avgRnk: +s.avgRnk || 0,
     };
   }).filter((r) => r.impCnt > 0).sort((a, b) => b.salesAmt - a.salesAmt);
 
-  return { campaignId, date: dateStr, keywordCount: kws.length, activeCount: rows.length, truncated, rows };
+  return { campaignId, date: startStr, start: startStr, end: endStr || startStr, keywordCount: kws.length, activeCount: rows.length, truncated, rows };
 }
 
 // 파워링크(요기보 검색광고) 키워드 기간합산 — 여러 WEB_SITE 캠페인(샐리필 제외) 통합.
@@ -314,8 +383,8 @@ async function getNaverBucketRange(sinceStr, untilStr) {
 
 // 쇼핑검색광고: 캠페인의 상품(소재)별 효율. adgroups→ads(소재)→/stats(ids=콤마구분)
 // 소재 referenceData.productTitle = 상품명, imageUrl = 썸네일. 상품 단위로 합산.
-async function getProductStats(campaignId, dateStr) {
-  const since = dash(dateStr);
+async function getProductStats(campaignId, startStr, endStr) {
+  const since = dash(startStr), until = dash(endStr || startStr);
   const CAP = 3000;
   const ags = await api('GET', '/ncc/adgroups', { query: { nccCampaignId: campaignId } });
   const adLists = await mapLimit(ags, 5, (ag) =>
@@ -346,7 +415,7 @@ async function getProductStats(campaignId, dateStr) {
   await mapLimit(batches, 5, async (batch) => {
     try {
       const out = await api('GET', '/stats', {
-        query: { ids: batch.join(','), fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until: since }) },
+        query: { ids: batch.join(','), fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until }) },
       });
       (out.data || []).forEach((r) => { if (r.id) stat[r.id] = r; });
     } catch (_) { /* 배치 실패 무시 */ }
@@ -366,12 +435,12 @@ async function getProductStats(campaignId, dateStr) {
     .filter((r) => r.impCnt > 0)
     .sort((a, b) => b.salesAmt - a.salesAmt);
 
-  return { campaignId, date: dateStr, productCount: adIds.length, activeCount: rows.length, truncated, rows };
+  return { campaignId, date: startStr, start: startStr, end: endStr || startStr, productCount: adIds.length, activeCount: rows.length, truncated, rows };
 }
 
 // 단일 광고그룹의 상품(소재)별 효율 (쇼핑 계층 2단계)
-async function getProductStatsForAdgroup(adgroupId, dateStr) {
-  const since = dash(dateStr);
+async function getProductStatsForAdgroup(adgroupId, startStr, endStr) {
+  const since = dash(startStr), until = dash(endStr || startStr);
   const ads = await api('GET', '/ncc/ads', { query: { nccAdgroupId: adgroupId } });
   const meta = {}; const adIds = [];
   for (const a of ads) {
@@ -385,7 +454,7 @@ async function getProductStatsForAdgroup(adgroupId, dateStr) {
   const stat = {};
   await mapLimit(batches, 5, async (batch) => {
     try {
-      const out = await api('GET', '/stats', { query: { ids: batch.join(','), fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until: since }) } });
+      const out = await api('GET', '/stats', { query: { ids: batch.join(','), fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until }) } });
       (out.data || []).forEach((r) => { if (r.id) stat[r.id] = r; });
     } catch (_) { /* 무시 */ }
   });
@@ -398,12 +467,12 @@ async function getProductStatsForAdgroup(adgroupId, dateStr) {
   }
   const rows = Object.values(prod).map((p) => ({ ...p, ror: p.salesAmt > 0 ? p.convAmt / p.salesAmt * 100 : 0 }))
     .filter((r) => r.impCnt > 0).sort((a, b) => b.salesAmt - a.salesAmt);
-  return { adgroupId, date: dateStr, productCount: adIds.length, activeCount: rows.length, rows };
+  return { adgroupId, date: startStr, start: startStr, end: endStr || startStr, productCount: adIds.length, activeCount: rows.length, rows };
 }
 
 // 캠페인의 광고그룹별 효율 (계층형 드릴다운 1단계). 입찰가·연결채널(URL) 포함.
-async function getAdgroupStats(campaignId, dateStr) {
-  const since = dash(dateStr);
+async function getAdgroupStats(campaignId, startStr, endStr) {
+  const since = dash(startStr), until = dash(endStr || startStr);
   const [ags, channels] = await Promise.all([
     api('GET', '/ncc/adgroups', { query: { nccCampaignId: campaignId } }),
     api('GET', '/ncc/channels').catch(() => []),
@@ -418,27 +487,28 @@ async function getAdgroupStats(campaignId, dateStr) {
   const stat = {};
   await mapLimit(batches, 5, async (batch) => {
     try {
-      const out = await api('GET', '/stats', { query: { ids: batch.join(','), fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until: since }) } });
+      const out = await api('GET', '/stats', { query: { ids: batch.join(','), fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until }) } });
       (out.data || []).forEach((r) => { if (r.id) stat[r.id] = r; });
     } catch (_) { /* 무시 */ }
   });
 
   const rows = ags.map((a) => {
     const s = stat[a.nccAdgroupId] || {};
+    const imp = +s.impCnt || 0, clk = +s.clkCnt || 0, spend = +s.salesAmt || 0, conv = +s.convAmt || 0;
     return {
       adgroupId: a.nccAdgroupId, name: a.name, status: a.status, bidAmt: +a.bidAmt || 0,
       channel: chMap[a.pcChannelId] || chMap[a.mobileChannelId] || '',
-      impCnt: +s.impCnt || 0, clkCnt: +s.clkCnt || 0, ctr: +s.ctr || 0, cpc: +s.cpc || 0,
-      salesAmt: +s.salesAmt || 0, ccnt: +s.ccnt || 0, convAmt: +s.convAmt || 0, ror: +s.ror || 0,
+      impCnt: imp, clkCnt: clk, ctr: imp ? +(clk / imp * 100).toFixed(2) : 0, cpc: clk ? Math.round(spend / clk) : 0,
+      salesAmt: spend, ccnt: +s.ccnt || 0, convAmt: conv, ror: spend ? Math.round(conv / spend * 100) : 0,
     };
   }).sort((a, b) => b.salesAmt - a.salesAmt);
 
-  return { campaignId, date: dateStr, count: rows.length, rows };
+  return { campaignId, date: startStr, start: startStr, end: endStr || startStr, count: rows.length, rows };
 }
 
 // 단일 광고그룹의 키워드별 효율 (계층형 드릴다운 2단계)
-async function getKeywordStatsForAdgroup(adgroupId, dateStr) {
-  const since = dash(dateStr);
+async function getKeywordStatsForAdgroup(adgroupId, startStr, endStr) {
+  const since = dash(startStr), until = dash(endStr || startStr);
   const kws = await api('GET', '/ncc/keywords', { query: { nccAdgroupId: adgroupId } });
   const F = ['impCnt', 'clkCnt', 'ctr', 'cpc', 'salesAmt', 'ccnt', 'convAmt', 'ror', 'avgRnk'];
   const batches = [];
@@ -447,18 +517,19 @@ async function getKeywordStatsForAdgroup(adgroupId, dateStr) {
   await mapLimit(batches, 5, async (batch) => {
     const ids = batch.map((k) => k.nccKeywordId).join(',');
     try {
-      const out = await api('GET', '/stats', { query: { ids, fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until: since }) } });
+      const out = await api('GET', '/stats', { query: { ids, fields: JSON.stringify(F), timeRange: JSON.stringify({ since, until }) } });
       (out.data || []).forEach((r) => { if (r.id) stat[r.id] = r; });
     } catch (_) { /* 무시 */ }
   });
   const rows = kws.map((k) => {
     const s = stat[k.nccKeywordId] || {};
+    const imp = +s.impCnt || 0, clk = +s.clkCnt || 0, spend = +s.salesAmt || 0, conv = +s.convAmt || 0;
     return {
-      keyword: k.keyword, impCnt: +s.impCnt || 0, clkCnt: +s.clkCnt || 0, ctr: +s.ctr || 0, cpc: +s.cpc || 0,
-      salesAmt: +s.salesAmt || 0, ccnt: +s.ccnt || 0, convAmt: +s.convAmt || 0, ror: +s.ror || 0, avgRnk: +s.avgRnk || 0,
+      keyword: k.keyword, impCnt: imp, clkCnt: clk, ctr: imp ? +(clk / imp * 100).toFixed(2) : 0, cpc: clk ? Math.round(spend / clk) : 0,
+      salesAmt: spend, ccnt: +s.ccnt || 0, convAmt: conv, ror: spend ? Math.round(conv / spend * 100) : 0, avgRnk: +s.avgRnk || 0,
     };
   }).filter((r) => r.impCnt > 0).sort((a, b) => b.salesAmt - a.salesAmt);
-  return { adgroupId, date: dateStr, keywordCount: kws.length, activeCount: rows.length, rows };
+  return { adgroupId, date: startStr, start: startStr, end: endStr || startStr, keywordCount: kws.length, activeCount: rows.length, rows };
 }
 
 // 어제 (로컬=KST 기준) YYYYMMDD
@@ -471,5 +542,5 @@ function yesterday() {
 
 module.exports = {
   BASE, CUSTOMER, FIELDS,
-  missingEnv, authHeaders, api, getCampaigns, getCampaignStats, getBizmoney, getCartConversions, getConversionBreakdown, getKeywordStats, getPowerlinkKeywordsRange, getNaverBucketRange, normKw, getProductStats, getProductStatsForAdgroup, getAdgroupStats, getKeywordStatsForAdgroup, yesterday, dash,
+  missingEnv, authHeaders, api, getCampaigns, getCampaignStats, getBizmoney, getCartConversions, getConversionBreakdown, getConversionBreakdownRange, getKeywordStats, getPowerlinkKeywordsRange, getNaverBucketRange, normKw, getProductStats, getProductStatsForAdgroup, getAdgroupStats, getKeywordStatsForAdgroup, yesterday, dash,
 };

@@ -210,45 +210,49 @@ export async function GET(req) {
       return J({ ok: true, start, end, campaignCount: nv.campaignCount, count: rows.length, totals, rows });
     }
 
-    // ── 네이버 광고그룹별 효율 ──
+    // ── 네이버 광고그룹별 효율 (기간 합산) ──
     if (p === '/api/adgroups') {
       const campaign = sp.get('campaign');
-      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const start = (sp.get('start') || sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const end = (sp.get('end') || sp.get('date') || start).replace(/-/g, '');
       if (!campaign) return J({ ok: false, error: 'campaign 파라미터 필요' }, 400);
-      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
-      return J({ ok: true, ...(await naver.getAdgroupStats(campaign, date)) });
+      if (!/^\d{8}$/.test(start) || !/^\d{8}$/.test(end)) return J({ ok: false, error: 'start/end는 YYYYMMDD 형식' }, 400);
+      return J({ ok: true, ...(await naver.getAdgroupStats(campaign, start, end)) });
     }
 
-    // ── 네이버 키워드 효율 ──
+    // ── 네이버 키워드 효율 (기간 합산) ──
     if (p === '/api/keywords') {
       const campaign = sp.get('campaign');
       const adgroup = sp.get('adgroup');
-      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const start = (sp.get('start') || sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const end = (sp.get('end') || sp.get('date') || start).replace(/-/g, '');
       if (!campaign && !adgroup) return J({ ok: false, error: 'campaign 또는 adgroup 파라미터 필요' }, 400);
-      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
-      const data = adgroup ? await naver.getKeywordStatsForAdgroup(adgroup, date) : await naver.getKeywordStats(campaign, date);
+      if (!/^\d{8}$/.test(start) || !/^\d{8}$/.test(end)) return J({ ok: false, error: 'start/end는 YYYYMMDD 형식' }, 400);
+      const data = adgroup ? await naver.getKeywordStatsForAdgroup(adgroup, start, end) : await naver.getKeywordStats(campaign, start, end);
       return J({ ok: true, ...data });
     }
 
-    // ── 네이버 쇼핑 상품별 효율 ──
+    // ── 네이버 쇼핑 상품별 효율 (기간 합산) ──
     if (p === '/api/products') {
       const campaign = sp.get('campaign');
       const adgroup = sp.get('adgroup');
-      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const start = (sp.get('start') || sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const end = (sp.get('end') || sp.get('date') || start).replace(/-/g, '');
       if (!campaign && !adgroup) return J({ ok: false, error: 'campaign 또는 adgroup 파라미터 필요' }, 400);
-      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
-      const data = adgroup ? await naver.getProductStatsForAdgroup(adgroup, date) : await naver.getProductStats(campaign, date);
+      if (!/^\d{8}$/.test(start) || !/^\d{8}$/.test(end)) return J({ ok: false, error: 'start/end는 YYYYMMDD 형식' }, 400);
+      const data = adgroup ? await naver.getProductStatsForAdgroup(adgroup, start, end) : await naver.getProductStats(campaign, start, end);
       return J({ ok: true, ...data });
     }
 
-    // ── 네이버 캠페인 효율(상세) + 구매/장바구니 분해 ──
+    // ── 네이버 캠페인 효율(상세) + 구매/장바구니 분해 (기간 합산) ──
     if (p === '/api/stats') {
-      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
-      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
+      const start = (sp.get('start') || sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const end = (sp.get('end') || sp.get('date') || start).replace(/-/g, '');
+      if (!/^\d{8}$/.test(start) || !/^\d{8}$/.test(end)) return J({ ok: false, error: 'start/end는 YYYYMMDD 형식' }, 400);
       const [data, biz, conv] = await Promise.all([
-        naver.getCampaignStats(date),
+        naver.getCampaignStats(start, end),
         naver.getBizmoney().catch(() => null),
-        naver.getConversionBreakdown(date).catch(() => null),
+        naver.getConversionBreakdownRange(start, end).catch(() => null),
       ]);
       // 캠페인별 구매(purchase)/장바구니(add_to_cart) 병합 → 실구매 ROAS·구매전환율
       if (conv && conv.byCampaign && Array.isArray(data.rows)) {
@@ -260,7 +264,12 @@ export async function GET(req) {
           r.cartCnt = b.cartCnt; r.cartVal = b.cartVal;
         }
       }
-      return J({ ok: true, customerId: naver.CUSTOMER, bizmoney: biz, convBuilt: !!(conv && conv.byCampaign), ...data });
+      return J({
+        ok: true, customerId: naver.CUSTOMER, bizmoney: biz,
+        convBuilt: !!(conv && conv.byCampaign && (conv.daysBuilt == null || conv.daysBuilt > 0)),
+        convDaysMissing: conv && conv.daysMissing != null ? conv.daysMissing : null,
+        ...data,
+      });
     }
 
     // ── 카카오모먼트 (보고서 + 연결상태) ──
