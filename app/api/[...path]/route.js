@@ -93,7 +93,7 @@ export async function GET(req) {
       const end = sp.get('end') || toYmd(now);
       const start = sp.get('start') || end;
       const criteo = (providers.providers || []).find((x) => x.id === 'criteo');
-      if (!criteo || !criteo.enabled()) return J({ ok: false, error: 'Criteo credentials are not configured' }, 400);
+      if (!criteo || !criteo.enabled()) return J({ ok: false, error: '크리테오 자격증명이 설정되지 않았습니다' }, 400);
       return J({ ok: true, ...(await criteo.getBreakdown(start, end)) });
     }
 
@@ -126,7 +126,7 @@ export async function GET(req) {
       const gfaT = (gfaQ && gfaQ.totals) || null;
       const spend = {
         naver: sumSp(nv), meta: sumSp(mt),
-        criteo: cr.length ? sumSp(cr) : (erred.has('Criteo') ? null : 0),
+        criteo: cr.length ? sumSp(cr) : ((erred.has('Criteo') || erred.has('크리테오')) ? null : 0),
         kakao: kk.length ? sumSp(kk) : 0,
         gfa: gfaT ? Math.round(gfaT.spend || 0) : 0,
       };

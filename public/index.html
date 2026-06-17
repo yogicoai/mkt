@@ -432,17 +432,17 @@ function metaAdTable(j,name){
     +'</tr></thead><tbody>'+body+'</tbody></table>';
 }
 
-// ── 크리테오 탭 (연동 대기 안내) ──
+// ── 크리테오 탭 ──
 function renderCriteo(){ loadCriteo(gStart,gEnd); }
 async function loadCriteo(start,end){
   const el=$('#criteo'); if(!el) return;
-  el.innerHTML='<div class="panel"><div class="state" style="padding:30px"><div class="spin"></div>Criteo loading...</div></div>';
+  el.innerHTML='<div class="panel"><div class="state" style="padding:30px"><div class="spin"></div>크리테오 데이터를 불러오는 중...</div></div>';
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
   try{
     const r=await fetch('/api/criteo?start='+encodeURIComponent(start||'')+'&end='+encodeURIComponent(end||start||''));
     const j=await r.json();
-    if(!j.ok) throw new Error(j.error||'failed');
+    if(!j.ok) throw new Error(j.error||'조회 실패');
     const t=j.totals||{};
     const roas=t.roas||0;
     const rows=j.adsets||[];
@@ -451,17 +451,18 @@ async function loadCriteo(start,end){
       +'<td>'+won(a.spend)+'</td><td>'+won(a.imp)+'</td><td>'+won(a.clk)+'</td><td>'+Number(a.ctr||0).toFixed(2)+'%</td>'
       +'<td>'+won(a.conv)+'</td><td>'+won(a.convValue)+'</td><td><span class="roas '+cls(a.roas||0)+'">'+won(a.roas||0)+'%</span></td>'
       +'</tr>').join('')
-      : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:14px">No Criteo data for this period.</td></tr>';
-    const balance=j.balance==null?'':('<span style="font-size:12px;color:var(--tx3);font-weight:500">Balance '+won(j.balance)+'</span>');
+      : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:14px">이 기간의 크리테오 데이터가 없습니다.</td></tr>';
+    const balance=j.balance==null?'':('<span style="font-size:12px;color:var(--tx3);font-weight:500">잔액 '+won(j.balance)+'원</span>');
     el.innerHTML='<div class="panel" style="margin-bottom:14px"><div class="ch" style="border:0;padding:0 0 10px">'
-      +'<div><div class="ct">Criteo '+esc(j.start||start)+' ~ '+esc(j.end||end)+'</div><div class="ch-hint">Adset breakdown from Criteo API</div></div>'+balance+'</div>'
+      +'<div><div class="ct">크리테오 '+esc(j.start||start)+' ~ '+esc(j.end||end)+'</div><div class="ch-hint">크리테오 API 기준 광고세트별 성과</div></div>'+balance+'</div>'
       +'<div class="cards">'
-      +'<div class="card accent"><div class="lbl">Revenue</div><div class="val">'+won(t.convValue)+'<span style="font-size:13px"> KRW</span></div><div class="sub">Spend '+won(t.spend)+' KRW / ROAS '+won(roas)+'%</div></div>'
-      +'<div class="card"><div class="lbl">Conversions / Clicks</div><div class="val">'+won(t.conv)+'<span style="font-size:13px;color:var(--muted)"> cnt</span></div><div class="sub">Clicks '+won(t.clk)+' / Impressions '+won(t.imp)+'</div></div>'
+      +'<div class="card accent"><div class="lbl">전환매출</div><div class="val">'+won(t.convValue)+'<span style="font-size:13px">원</span></div><div class="sub">광고비 '+won(t.spend)+'원 · ROAS '+won(roas)+'%</div></div>'
+      +'<div class="card"><div class="lbl">전환수 / 클릭</div><div class="val">'+won(t.conv)+'<span style="font-size:13px;color:var(--muted)">건</span></div><div class="sub">클릭 '+won(t.clk)+'회 · 노출 '+won(t.imp)+'회</div></div>'
       +'</div></div>'
-      +'<div class="panel"><h2>Criteo Adsets</h2><table><thead><tr><th style="text-align:left">Adset</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>CTR</th><th>Conversions</th><th>Revenue</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+      +'<div class="panel"><h2>크리테오 광고세트</h2><table><thead><tr><th style="text-align:left">광고세트</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>전환수</th><th>전환매출</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
   }catch(e){
-    el.innerHTML='<div class="panel"><h2>Criteo</h2><div class="err" style="margin:6px 0">Criteo query failed: '+esc(e.message)+'</div></div>';
+    const msg=String(e.message||'조회 실패').replace(/Criteo/g,'크리테오');
+    el.innerHTML='<div class="panel"><h2>크리테오</h2><div class="err" style="margin:6px 0">크리테오 조회 실패: '+esc(msg)+'</div></div>';
   }
 }
 
@@ -1180,13 +1181,13 @@ function kwTable(j,name){
   const body=top.map(k=>{
     const cvr=k.clkCnt? (k.ccnt/k.clkCnt*100):0;
     const cpa=k.ccnt? Math.round(k.salesAmt/k.ccnt):0;
-    return '<tr>'+td(k.keyword,'left')+td(won(k.salesAmt))+td(won(k.impCnt))+td(won(k.clkCnt))+td(k.ctr+'%')+td(won(k.cpc))+td(k.ccnt)+td(cvr.toFixed(1)+'%')+td(k.ccnt?won(cpa):'-')+td('<span class="roas '+kwClass(k)+'">'+won(Math.round(k.ror))+'%</span>')+td(k.avgRnk||'-')+'</tr>';
+    return '<tr>'+td(k.keyword,'left')+td(won(k.salesAmt))+td(won(k.impCnt))+td(won(k.clkCnt))+td(k.ctr+'%')+td(won(k.cpc))+td(k.ccnt)+td(cvr.toFixed(1)+'%')+td(won(k.convAmt||0))+td(k.ccnt?won(cpa):'-')+td('<span class="roas '+kwClass(k)+'">'+won(Math.round(k.ror))+'%</span>')+td(k.avgRnk||'-')+'</tr>';
   }).join('');
   const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
   const note=j.activeCount>30?('<div style="font-size:10px;color:var(--tx3);margin-top:6px">노출발생 '+j.activeCount+'개 중 광고비 상위 30개'+(j.truncated?' · ※키워드 매우 많아 일부만 조회':'')+'</div>'):'';
   return '<div style="font-weight:700;font-size:11px;margin-bottom:8px">🔑 '+name+' — 키워드 효율 (광고비순, 노출발생 '+j.activeCount+'개)</div>'+
     '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'+
-    h('키워드','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('CPC')+h('전환')+h('전환율')+h('전환당비용')+h('ROAS')+h('순위')+
+    h('키워드','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('CPC')+h('전환')+h('전환율')+h('전환매출')+h('전환당비용')+h('ROAS')+h('순위')+
     '</tr></thead><tbody>'+body+'</tbody></table>'+note;
 }
 function prodTable(j,name){

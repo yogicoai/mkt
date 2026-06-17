@@ -22,7 +22,7 @@ async function token() {
     body: new URLSearchParams({ grant_type: 'client_credentials', client_id: ID, client_secret: SECRET }),
   });
   const j = await res.json();
-  if (!j.access_token) throw new Error('Criteo 토큰 실패: ' + JSON.stringify(j));
+  if (!j.access_token) throw new Error('크리테오 토큰 실패: ' + JSON.stringify(j));
   _tok = j.access_token;
   _exp = Date.now() + ((j.expires_in || 900) - 60) * 1000; // 15분 만료 - 여유 60s
   return _tok;
@@ -38,7 +38,7 @@ async function advertiserIds(tok) {
   let j = null; try { j = await res.json(); } catch (_) {}
   const arr = (j && j.data) || [];
   const ids = (Array.isArray(arr) ? arr : [arr]).map((a) => a && (a.id != null ? a.id : (a.attributes && a.attributes.id))).filter(Boolean);
-  if (!ids.length) throw new Error('Criteo 접근 가능한 광고주가 없습니다 — 앱(App 25299)을 Yogibo 광고주에 연결(승인)했는지 확인하세요(승인되면 자동 인식).');
+  if (!ids.length) throw new Error('크리테오 접근 가능한 광고주가 없습니다 — 앱(App 25299)을 Yogibo 광고주에 연결(승인)했는지 확인하세요(승인되면 자동 인식).');
   _advCache = ids.join(',');
   return _advCache;
 }
@@ -80,7 +80,7 @@ async function getBreakdown(startStr, endStr) {
   });
   const text = await res.text();
   let j; try { j = JSON.parse(text); } catch { j = text; }
-  if (!res.ok) throw new Error('Criteo 통계 실패: ' + (typeof j === 'string' ? j.slice(0, 200) : JSON.stringify(j).slice(0, 300)));
+  if (!res.ok) throw new Error('크리테오 통계 실패: ' + (typeof j === 'string' ? j.slice(0, 200) : JSON.stringify(j).slice(0, 300)));
   const num = (v) => +v || 0;
   const raw = j.Rows || j.rows || j.data || [];
   const adsets = raw.map((r) => {
@@ -110,7 +110,7 @@ async function getBreakdown(startStr, endStr) {
 
 module.exports = {
   id: 'criteo',
-  label: 'Criteo',
+  label: '크리테오',
   enabled,
   getBreakdown,
   async getSummary(date) {
@@ -131,7 +131,7 @@ module.exports = {
     });
     const text = await res.text();
     let j; try { j = JSON.parse(text); } catch { j = text; }
-    if (!res.ok) throw new Error('Criteo 통계 실패: ' + (typeof j === 'string' ? j.slice(0, 200) : JSON.stringify(j)));
+    if (!res.ok) throw new Error('크리테오 통계 실패: ' + (typeof j === 'string' ? j.slice(0, 200) : JSON.stringify(j)));
 
     let spend = 0, conv = 0, rev = 0;
     if (j && Array.isArray(j.columns) && Array.isArray(j.data)) {
@@ -155,7 +155,7 @@ module.exports = {
     }
     const bal = await balance(tok);
     return [{
-      platform: 'Criteo',
+      platform: '크리테오',
       spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev),
       balance: bal, currency: 'KRW', note: bal == null ? '잔액=Retail Media 연동시' : '',
     }];
