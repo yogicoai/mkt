@@ -62,10 +62,57 @@ async function balance(tok) {
   } catch (_) { return null; }
 }
 
+// 기간 + 광고세트(Adset)별 분해 — 크리테오 탭용.
+// 검증(2026-06): dimensions=['AdsetId','Adset'], metrics=AdvertiserCost/Displays/Clicks/SalesPc30dPv24h/RevenueGeneratedPc30dPv24h → {Total, Rows} 반환.
+async function getBreakdown(startStr, endStr) {
+  const tok = await token();
+  const advIds = await advertiserIds(tok);
+  const sd = dash(String(startStr).replace(/-/g, ''));
+  const ed = dash(String(endStr || startStr).replace(/-/g, ''));
+  const body = {
+    advertiserIds: advIds, currency: 'KRW',
+    dimensions: ['AdsetId', 'Adset'],
+    metrics: ['AdvertiserCost', 'Displays', 'Clicks', 'SalesPc30dPv24h', 'RevenueGeneratedPc30dPv24h'],
+    startDate: sd, endDate: ed, format: 'json', timezone: 'Asia/Seoul',
+  };
+  const res = await fetch(`https://api.criteo.com/${V}/statistics/report`, {
+    method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let j; try { j = JSON.parse(text); } catch { j = text; }
+  if (!res.ok) throw new Error('Criteo 통계 실패: ' + (typeof j === 'string' ? j.slice(0, 200) : JSON.stringify(j).slice(0, 300)));
+  const num = (v) => +v || 0;
+  const raw = j.Rows || j.rows || j.data || [];
+  const adsets = raw.map((r) => {
+    const spend = Math.round(num(r.AdvertiserCost)), imp = Math.round(num(r.Displays)), clk = Math.round(num(r.Clicks));
+    const conv = Math.round(num(r.SalesPc30dPv24h)), rev = Math.round(num(r.RevenueGeneratedPc30dPv24h));
+    return {
+      id: r.AdsetId, name: r.Adset || '(이름없음)', spend, imp, clk,
+      ctr: imp ? +(clk / imp * 100).toFixed(2) : 0, cpc: clk ? Math.round(spend / clk) : 0,
+      conv, convValue: rev, roas: spend ? Math.round(rev / spend * 100) : 0,
+    };
+  }).filter((a) => a.spend > 0 || a.imp > 0).sort((a, b) => b.spend - a.spend);
+  const T = j.Total || {};
+  const sum = (k) => adsets.reduce((a, r) => a + r[k], 0);
+  const totals = {
+    spend: T.AdvertiserCost != null ? Math.round(num(T.AdvertiserCost)) : sum('spend'),
+    imp: T.Displays != null ? Math.round(num(T.Displays)) : sum('imp'),
+    clk: T.Clicks != null ? Math.round(num(T.Clicks)) : sum('clk'),
+    conv: T.SalesPc30dPv24h != null ? Math.round(num(T.SalesPc30dPv24h)) : sum('conv'),
+    convValue: T.RevenueGeneratedPc30dPv24h != null ? Math.round(num(T.RevenueGeneratedPc30dPv24h)) : sum('convValue'),
+  };
+  totals.ctr = totals.imp ? +(totals.clk / totals.imp * 100).toFixed(2) : 0;
+  totals.cpc = totals.clk ? Math.round(totals.spend / totals.clk) : 0;
+  totals.roas = totals.spend ? Math.round(totals.convValue / totals.spend * 100) : 0;
+  let bal = null; try { bal = await balance(tok); } catch (_) { /* 잔액 실패 무시 */ }
+  return { start: sd, end: ed, advertiser: advIds, totals, adsets, balance: bal };
+}
+
 module.exports = {
   id: 'criteo',
   label: 'Criteo',
   enabled,
+  getBreakdown,
   async getSummary(date) {
     const tok = await token();
     const advIds = await advertiserIds(tok);

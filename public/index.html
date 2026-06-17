@@ -300,6 +300,7 @@ function loadTab(t){
   else if(t==='meta') loadMeta(gStart,gEnd);
   else if(t==='camp') loadCamp(gStart,gEnd);
   else if(t==='kakao') loadKakao();
+  else if(t==='criteo') loadCriteo(gStart,gEnd);
   else if(t==='ai') renderAiSetup();
   else if(t==='report') renderReport();
   tabPeriod[t]=periodKey();
@@ -347,7 +348,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   if(t==='naver' && chart) try{ chart.resize(); }catch(_){}
   if(t==='all' && trendChart) try{ trendChart.resize(); }catch(_){}
   // 상단 글로벌 기간으로 (아직 그 기간으로 안 불러온 탭만) 로드
-  if(t!=='criteo' && tabPeriod[t]!==periodKey()) loadTab(t);
+  if(tabPeriod[t]!==periodKey()) loadTab(t);
 }));
 // META 캠페인행 클릭 → 소재 드릴다운 (위임)
 $('#meta').addEventListener('click',(e)=>{ const tr=e.target.closest&&e.target.closest('.meta-camp-row'); if(tr && $('#meta').contains(tr)) toggleMetaAds(tr); });
@@ -432,9 +433,36 @@ function metaAdTable(j,name){
 }
 
 // ── 크리테오 탭 (연동 대기 안내) ──
-function renderCriteo(){
+function renderCriteo(){ loadCriteo(gStart,gEnd); }
+async function loadCriteo(start,end){
   const el=$('#criteo'); if(!el) return;
-  el.innerHTML='<div class="panel"><h2>크리테오 (연동 대기)</h2><div style="color:var(--tx3);font-size:13px;line-height:1.85">코드는 완성됐고, Criteo 개발자 앱(App ID 25299)을 <b>광고주(Yogibo KR)에 연결(consent)</b>하면 자동 표시됩니다.<br>· 연결은 Criteo 담당자(account manager)에게 요청해야 합니다.<br>· <b>승인되면 광고주 ID를 자동 인식</b>해 추가 설정 없이 바로 표시됩니다.<br>· 연동되면: 상품·캠페인별 <b>광고비 / 전환 / 전환매출 / ROAS</b>를 위 통합표와 이 탭에서 함께 보여줍니다.</div></div>';
+  el.innerHTML='<div class="panel"><div class="state" style="padding:30px"><div class="spin"></div>Criteo loading...</div></div>';
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
+  try{
+    const r=await fetch('/api/criteo?start='+encodeURIComponent(start||'')+'&end='+encodeURIComponent(end||start||''));
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.error||'failed');
+    const t=j.totals||{};
+    const roas=t.roas||0;
+    const rows=j.adsets||[];
+    const body=rows.length? rows.map(a=>'<tr>'
+      +'<td style="text-align:left">'+esc(a.name||a.id||'-')+'</td>'
+      +'<td>'+won(a.spend)+'</td><td>'+won(a.imp)+'</td><td>'+won(a.clk)+'</td><td>'+Number(a.ctr||0).toFixed(2)+'%</td>'
+      +'<td>'+won(a.conv)+'</td><td>'+won(a.convValue)+'</td><td><span class="roas '+cls(a.roas||0)+'">'+won(a.roas||0)+'%</span></td>'
+      +'</tr>').join('')
+      : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:14px">No Criteo data for this period.</td></tr>';
+    const balance=j.balance==null?'':('<span style="font-size:12px;color:var(--tx3);font-weight:500">Balance '+won(j.balance)+'</span>');
+    el.innerHTML='<div class="panel" style="margin-bottom:14px"><div class="ch" style="border:0;padding:0 0 10px">'
+      +'<div><div class="ct">Criteo '+esc(j.start||start)+' ~ '+esc(j.end||end)+'</div><div class="ch-hint">Adset breakdown from Criteo API</div></div>'+balance+'</div>'
+      +'<div class="cards">'
+      +'<div class="card accent"><div class="lbl">Revenue</div><div class="val">'+won(t.convValue)+'<span style="font-size:13px"> KRW</span></div><div class="sub">Spend '+won(t.spend)+' KRW / ROAS '+won(roas)+'%</div></div>'
+      +'<div class="card"><div class="lbl">Conversions / Clicks</div><div class="val">'+won(t.conv)+'<span style="font-size:13px;color:var(--muted)"> cnt</span></div><div class="sub">Clicks '+won(t.clk)+' / Impressions '+won(t.imp)+'</div></div>'
+      +'</div></div>'
+      +'<div class="panel"><h2>Criteo Adsets</h2><table><thead><tr><th style="text-align:left">Adset</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>CTR</th><th>Conversions</th><th>Revenue</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  }catch(e){
+    el.innerHTML='<div class="panel"><h2>Criteo</h2><div class="err" style="margin:6px 0">Criteo query failed: '+esc(e.message)+'</div></div>';
+  }
 }
 
 // ── 카카오모먼트 탭 (연결 → 보고서) ──

@@ -88,6 +88,15 @@ export async function GET(req) {
     }
 
     // ── AI 기간 분석 ──
+    if (p === '/api/criteo') {
+      const now = new Date();
+      const end = sp.get('end') || toYmd(now);
+      const start = sp.get('start') || end;
+      const criteo = (providers.providers || []).find((x) => x.id === 'criteo');
+      if (!criteo || !criteo.enabled()) return J({ ok: false, error: 'Criteo credentials are not configured' }, 400);
+      return J({ ok: true, ...(await criteo.getBreakdown(start, end)) });
+    }
+
     if (p === '/api/ai-analyze') {
       const now = new Date();
       const end = (sp.get('end') || toYmd(now)).replace(/-/g, '');
