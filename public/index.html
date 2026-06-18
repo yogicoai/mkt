@@ -237,7 +237,6 @@
       &nbsp;|&nbsp; 🔒 API 키·서명은 <b>서버에서만</b> 처리(브라우저 비노출)
     </div>
     <div id="platforms"></div>
-    <div id="gfa"></div>
     <div id="trend"></div>
   </div>
 
@@ -298,7 +297,7 @@ function loadTab(t){
   if(t==='all'||t==='naver'){ load(); tabPeriod['all']=tabPeriod['naver']=periodKey(); return; }
   if(t==='utm') loadUtm(gStart,gEnd);
   else if(t==='meta') loadMeta(gStart,gEnd);
-  else if(t==='camp') loadCamp(gStart,gEnd);
+  else if(t==='camp') loadCamp();
   else if(t==='kakao') loadKakao();
   else if(t==='criteo') loadCriteo(gStart,gEnd);
   else if(t==='ai') renderAiSetup();
@@ -323,7 +322,6 @@ function ymd(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-
   loadTab('all');                 // 전체+네이버
   loadTrend(90);
   renderCriteo();
-  loadGfa();
 })();
 
 document.querySelectorAll('#periodBtns button').forEach(b=>b.addEventListener('click',()=>{ const r=presetRange(b.dataset.p); setPeriod(r[0],r[1]); }));
@@ -531,14 +529,14 @@ function renderCamp(j,start,end){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const cls=v=>v>=300?'hi':v>=100?'mid':v>0?'lo':'na';
   const s=start||j.storedFrom||'', e=end||j.storedTo||'';
-  const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 GFA · 캠페인 엑셀/CSV 업로드 <span style="font-size:12px;color:var(--tx3)">날짜·캠페인별 지표 · 기간은 상단에서</span></div>'
-    +'<div style="font-size:11px;color:var(--tx3);margin:8px 0">조회 기간: <b>'+(s?(s+' ~ '+e):'전체')+'</b></div>'
+  const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 GFA · 캠페인 CSV 대량 업로드 <span style="font-size:12px;color:var(--tx3)">여러 파일 한 번에 · 파일마다 다른 기간이어도 합산</span></div>'
+    +'<div style="font-size:11px;color:var(--tx3);margin:8px 0">저장됨: <b>'+((j.byFile||[]).length)+'개 파일 · '+(j.count||0)+'개 캠페인</b></div>'
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
-      +'<label class="qb" style="cursor:pointer">📑 엑셀/CSV 선택<input type="file" id="cFile" accept=".xlsx,.csv,text/csv" style="display:none"></label>'
+      +'<label class="qb" style="cursor:pointer">📑 엑셀/CSV 선택 (여러 개 가능)<input type="file" id="cFile" accept=".xlsx,.csv,text/csv" multiple style="display:none"></label>'
       +'<button id="cSave" class="qb" style="background:var(--ac);color:#fff;border-color:var(--ac);opacity:.45;pointer-events:none">💾 DB에 저장</button>'
       +'<span id="cStat" style="font-size:11px;color:var(--tx3)"></span>'
     +'</div>'
-    +'<div class="glossary" style="margin:8px 0 0">컬럼 자동인식: <b>날짜/시작일/종료일·캠페인 이름·노출수·클릭수·총비용·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. 날짜 컬럼이 없으면 상단 조회기간의 종료일로 저장돼요. '+(j.storedFrom?('저장됨: <b>'+j.storedFrom+' ~ '+j.storedTo+'</b> ('+(j.count||0)+'개 캠페인)'):'아직 업로드된 데이터가 없어요.')+' <b>중복 날짜는 새 파일로 교체</b>돼요.</div>'
+    +'<div class="glossary" style="margin:8px 0 0"><b>여러 파일을 한 번에</b> 올리면 <b>파일마다 합산</b>돼요 (GFA 메타형 export 자동 인식). 컬럼 자동인식: <b>캠페인 이름·총비용·노출·클릭·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. <b>같은 파일명을 다시 올리면 그 파일만 교체</b>돼서 같은 데이터가 쌓이지 않아요. '+(j.storedFrom?('현재 '+((j.byFile||[]).length)+'개 파일 저장됨'):'아직 업로드된 데이터가 없어요.')+'</div>'
     +(j.storedFrom?('<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">'
       +'<span style="font-size:11px;color:var(--tx3)">🗂 관리</span>'
       +'<input type="date" id="cDelStart" value="'+(j.storedFrom||'')+'" style="font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:6px">'
@@ -557,23 +555,33 @@ function renderCamp(j,start,end){
     : '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">이 기간 데이터 없음 — 엑셀/CSV를 업로드하세요</td></tr>';
   const t=j.totals||{};
   const foot=rows.length? '<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>'+won(t.spend)+'</td><td>'+won(t.imp)+'</td><td>'+won(t.clk)+'</td><td>'+(t.imp?(t.clk/t.imp*100).toFixed(2):0)+'%</td><td>'+(t.clk?won(Math.round(t.spend/t.clk)):0)+'</td><td>'+won(t.purch)+'</td><td>'+won(t.purchVal)+'</td><td>'+(t.spend?won(Math.round(t.purchVal/t.spend*100)):0)+'%</td><td>'+won(t.cart)+'</td><td>'+won(t.cartVal)+'</td></tr></tfoot>':'';
-  const table='<div class="panel"><h2>캠페인별 '+(s?('('+s+' ~ '+e+')'):'(전체)')+' · '+rows.length+'개</h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
-  $('#camp').innerHTML=ctrl+table;
+  const table='<div class="panel"><h2>캠페인별 합계 · '+rows.length+'개 <span style="font-size:11px;color:var(--tx3);font-weight:500">(전체 파일 합산)</span></h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
+  const sumTable=(title,arr,keyName,keyLabel)=>(arr&&arr.length)?('<div class="panel"><h2>'+title+'</h2><table><thead><tr><th style="text-align:left">'+keyLabel+'</th><th>광고비</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+arr.map(r=>'<tr><td style="text-align:left">'+esc(String(r[keyName]))+'</td><td>'+won(r.spend)+'</td><td>'+won(r.purch)+'</td><td>'+won(r.purchVal)+'</td><td><span class="roas '+cls(r.purchRoas)+'">'+won(r.purchRoas)+'%</span></td><td>'+won(r.cart)+'</td><td>'+won(r.cartVal)+'</td></tr>').join('')+'</tbody></table></div>'):'';
+  const fileTable=sumTable('📁 파일(기간)별 합계 · '+((j.byFile||[]).length)+'개',j.byFile,'file','파일');
+  const monthTable=sumTable('🗓 월별 합계 <span style="font-size:11px;color:var(--tx3);font-weight:500">(캠페인 시작일 기준 · 참고용)</span>',j.byMonth,'month','월');
+  $('#camp').innerHTML=ctrl+table+fileTable+monthTable;
   // 기간 컨트롤은 상단 통합바로 일원화
   // 2단계: 파일 선택 → [💾 DB에 저장] 클릭으로 저장 (중복 날짜는 새 파일 우선)
-  let _cFile=null;
+  let _cFiles=[];
   const cf=$('#cFile'), cSave=$('#cSave'), st=$('#cStat');
   if(cf) cf.addEventListener('change',(ev)=>{
-    _cFile=(ev.target.files&&ev.target.files[0])||null;
-    if(st){ st.textContent=_cFile?('선택됨: '+_cFile.name+' → [💾 DB에 저장] 클릭'):''; st.style.color='var(--tx3)'; }
-    if(cSave){ cSave.style.opacity=_cFile?'1':'.45'; cSave.style.pointerEvents=_cFile?'auto':'none'; }
+    _cFiles=Array.from((ev.target.files)||[]);
+    if(st){ st.textContent=_cFiles.length?(_cFiles.length+'개 선택됨'+(_cFiles.length<=4?(': '+_cFiles.map(f=>f.name).join(', ')):'')+' → [💾 DB에 저장] 클릭'):''; st.style.color='var(--tx3)'; }
+    if(cSave){ const on=_cFiles.length>0; cSave.style.opacity=on?'1':'.45'; cSave.style.pointerEvents=on?'auto':'none'; }
   });
   if(cSave) cSave.addEventListener('click',async()=>{
-    if(!_cFile) return;
-    if(st){ st.textContent='저장 중…'; st.style.color='var(--tx3)'; } cSave.style.pointerEvents='none';
-    try{ const qs='?start='+encodeURIComponent(gStart||'')+'&end='+encodeURIComponent(gEnd||gStart||''); const r=await fetch('/api/campaigns-upload'+qs,{method:'POST',body:_cFile}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
-      if(st){ st.textContent='✓ 저장됨 '+jj.added+'행'+(jj.replaced?(' · 중복 '+jj.replaced+'행 교체'):'')+' ('+jj.from+'~'+jj.to+')'; st.style.color='var(--ac)'; }
-      _cFile=null; loadCamp(jj.from,jj.to);
+    if(!_cFiles.length) return;
+    if(st){ st.textContent='업로드 중… ('+_cFiles.length+'개 파일)'; st.style.color='var(--tx3)'; } cSave.style.pointerEvents='none';
+    try{
+      const b64=await Promise.all(_cFiles.map(f=>new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(String(rd.result).split(',')[1]||''); rd.onerror=()=>rej(new Error('읽기 실패: '+f.name)); rd.readAsDataURL(f); })));
+      const qs='?start='+encodeURIComponent(gStart||'')+'&end='+encodeURIComponent(gEnd||gStart||'');
+      const r=await fetch('/api/campaigns-upload'+qs,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:b64,names:_cFiles.map(f=>f.name)})});
+      const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
+      let msg='✓ '+(jj.okFiles||0)+'/'+(jj.files||0)+'개 파일 저장 · '+won(jj.added)+'건'+(jj.replaced?(' · 기존 '+won(jj.replaced)+'건 교체'):'')+' (누적 '+won(jj.totalRows||0)+'건 / '+(jj.fileCount||0)+'개 파일)';
+      const failed=(jj.perFile||[]).filter(f=>!f.ok);
+      if(failed.length) msg+=' · ⚠️ 실패 '+failed.length+'개: '+failed.map(f=>f.name+'('+f.error+')').join('; ');
+      if(st){ st.textContent=msg; st.style.color=failed.length?'#C2710C':'var(--ac)'; }
+      _cFiles=[]; loadCamp();
     }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } cSave.style.pointerEvents='auto'; }
   });
   const cClear=$('#cClear'); if(cClear) cClear.addEventListener('click',async()=>{

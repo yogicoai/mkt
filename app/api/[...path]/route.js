@@ -312,10 +312,20 @@ export async function POST(req) {
       return J({ ok: true, ...out });
     }
 
-    // ── 캠페인 엑셀/CSV 업로드 → 저장 ──
+    // ── 캠페인 엑셀/CSV 업로드 → 저장 (단일 raw 또는 JSON {files:[base64]} 대량) ──
     if (p === '/api/campaigns-upload') {
+      const fallbackDate = sp.get('end') || sp.get('start') || '';
+      const ct = req.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const body = await req.json().catch(() => ({}));
+        const list = Array.isArray(body.files) ? body.files : [];
+        if (!list.length) return J({ ok: false, error: '업로드할 파일이 없습니다' }, 400);
+        const buffers = list.map((b) => Buffer.from(String(b || ''), 'base64'));
+        const r = await campaigns.parseUploadMany(buffers, { fallbackDate, names: Array.isArray(body.names) ? body.names : [] });
+        return J({ ok: true, ...r });
+      }
       const buf = Buffer.from(await req.arrayBuffer());
-      const r = await campaigns.parseUpload(buf, { fallbackDate: sp.get('end') || sp.get('start') || '' });
+      const r = await campaigns.parseUpload(buf, { fallbackDate });
       return J({ ok: true, ...r });
     }
 
