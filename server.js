@@ -16,7 +16,7 @@ const { analyze, enabled: analyzeEnabled, model: analyzeModel } = require('./ana
 const { db: getDb, configured: dbConfigured } = require('./db');
 const cafe24 = require('./cafe24-analytics');
 const metaApi = require('./meta-api');
-const { parseXlsx } = require('./xlsx-lite');
+const { parseRows } = require('./xlsx-lite');
 const aiDaily = require('./ai-daily');
 const campaigns = require('./campaigns');
 
@@ -132,7 +132,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // ── API: 캠페인 엑셀 업로드(날짜+지표) → 저장 ──
+  // ── API: 캠페인 엑셀/CSV 업로드(날짜+지표) → 저장 ──
   if (url.pathname === '/api/campaigns-upload' && req.method === 'POST') {
     const chunks = []; let size = 0;
     req.on('data', (c) => { chunks.push(c); size += c.length; if (size > 20e6) req.destroy(); });
@@ -204,7 +204,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 405, { ok: false, error: 'GET 또는 POST' });
   }
 
-  // ── API: GFA 엑셀(.xlsx) 업로드 → 월별 광고비/전환매출 합산 저장 ──
+  // ── API: GFA 엑셀/CSV 업로드 → 월별 광고비/전환매출 합산 저장 ──
   if (url.pathname === '/api/gfa-upload' && req.method === 'POST') {
     const FILE = path.join(__dirname, 'gfa-manual.json');
     const readData = () => { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (_) { return {}; } };
@@ -212,7 +212,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', (c) => { chunks.push(c); size += c.length; if (size > 12e6) req.destroy(); });
     req.on('end', () => {
       try {
-        const rows = parseXlsx(Buffer.concat(chunks));
+        const rows = parseRows(Buffer.concat(chunks));
         const num = (s) => { const n = parseFloat(String(s == null ? '' : s).replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : 0; };
         const normMonth = (s) => {
           s = String(s == null ? '' : s).trim(); let m;

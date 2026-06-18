@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * 캠페인 엑셀 업로드 저장/조회 — 날짜+캠페인 단위로 저장하고 기간으로 집계.
+ * 캠페인 엑셀/CSV 업로드 저장/조회 — 날짜+캠페인 단위로 저장하고 기간으로 집계.
  * 컬럼 자동탐지: 날짜, 캠페인명, 노출, 클릭, 광고비(총비용), CPC, 구매완료수,
- *   장바구니수, 구매완료 전환매출, 장바구니 전환매출. (무의존성 xlsx-lite 사용)
+ *   장바구니수, 구매완료 전환매출, 장바구니 전환매출. (무의존성 xlsx-lite/CSV 사용)
  */
-const { parseXlsx } = require('./xlsx-lite');
+const { parseRows } = require('./xlsx-lite');
 const { kvGet, kvSet } = require('./store');
 
 const KEY = 'uploaded-campaigns';
@@ -21,33 +21,46 @@ function normDate(s) {
   return '';
 }
 
-async function parseUpload(buf) {
-  const rows = parseXlsx(buf);
-  const find = (r, re) => { for (let i = 0; i < r.length; i++) if (re.test(String(r[i] == null ? '' : r[i]))) return i; return -1; };
+async function parseUpload(buf, opts = {}) {
+  const rows = parseRows(buf);
+  const find = (r, re, reject) => {
+    for (let i = 0; i < r.length; i++) {
+      const raw = String(r[i] == null ? '' : r[i]).trim();
+      const compact = raw.replace(/\s+/g, '');
+      if ((re.test(raw) || re.test(compact)) && !(reject && (reject.test(raw) || reject.test(compact)))) return i;
+    }
+    return -1;
+  };
   let hi = -1, col = {};
+  const uploadDate = normDate(opts.fallbackDate || '');
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
     const r = rows[i] || [];
-    const d = find(r, /날짜|일자|date/i), c = find(r, /캠페인|광고\s*명|campaign/i);
-    if (d >= 0 && c >= 0) {
+    const d = find(r, /날짜|일자|^date$/i);
+    const end = find(r, /종료일|종료날짜|end\s*date/i);
+    const start = find(r, /시작일|시작날짜|start\s*date/i);
+    const c = find(r, /캠페인(명|이름)?|광고명|campaign(name)?/i, /id|번호|유형|상태/i);
+    if ((d >= 0 || uploadDate || end >= 0 || start >= 0) && c >= 0) {
       hi = i;
       col = {
-        date: d, camp: c,
-        imp: find(r, /노출/i), clk: find(r, /클릭/i),
-        spend: find(r, /광고비|총\s*비용|소진|cost|spend|^비용/i),
-        purch: find(r, /구매.*(수|건)|purchase/i),
-        cart: find(r, /장바구니.*(담기|수)|장바구니수|cart/i),
-        purchVal: find(r, /구매.*(전환)?\s*매출/i),
-        cartVal: find(r, /장바구니.*(전환)?\s*매출/i),
+        date: d, endDate: end, startDate: start, camp: c,
+        imp: find(r, /노출|impression/i), clk: find(r, /클릭|click/i),
+        spend: find(r, /광고비|총비용|총\s*비용|소진|cost|spend|^비용/i),
+        purch: find(r, /구매.*(완료)?(수|건)|전환수|purchase/i, /매출|금액|value|revenue/i),
+        cart: find(r, /장바구니.*(담기|수|건)|장바구니수|cart/i, /매출|금액|value|revenue/i),
+        purchVal: find(r, /구매.*(전환)?\s*매출|구매.*금액|purchase.*(value|revenue)/i),
+        cartVal: find(r, /장바구니.*(전환)?\s*매출|장바구니.*금액|cart.*(value|revenue)/i),
       };
       break;
     }
   }
-  if (hi < 0) throw new Error('헤더(날짜·캠페인명)를 찾지 못했습니다. 컬럼명을 확인하세요.');
+  if (hi < 0) throw new Error('헤더(날짜/시작일/종료일·캠페인 이름)를 찾지 못했습니다. 컬럼명을 확인하세요.');
   // 새 파일을 먼저 파싱 → 새 파일이 덮는 날짜 집합 수집
   const incoming = {}; const dateSet = new Set(); const dates = [];
   for (let i = hi + 1; i < rows.length; i++) {
     const r = rows[i] || [];
-    const date = normDate(r[col.date]); const camp = String(r[col.camp] == null ? '' : r[col.camp]).trim();
+    // 파일의 날짜(날짜→종료일→시작일)를 우선, 없을 때만 조회기간 종료일(uploadDate)로 폴백
+    const date = (col.date >= 0 ? normDate(r[col.date]) : '') || normDate(r[col.endDate]) || normDate(r[col.startDate]) || uploadDate;
+    const camp = String(r[col.camp] == null ? '' : r[col.camp]).trim();
     if (!date || !camp) continue;
     incoming[date + '\t' + camp] = {
       date, campaign: camp,
@@ -57,6 +70,9 @@ async function parseUpload(buf) {
       purchVal: col.purchVal >= 0 ? num(r[col.purchVal]) : 0, cartVal: col.cartVal >= 0 ? num(r[col.cartVal]) : 0,
     };
     dateSet.add(date); dates.push(date);
+  }
+  if (!Object.keys(incoming).length) {
+    throw new Error('저장할 데이터가 없습니다 — 날짜(또는 시작일/종료일)와 캠페인 이름이 채워진 행을 찾지 못했어요. 날짜 컬럼이 없으면 상단에서 조회 기간을 먼저 선택해주세요.');
   }
   const data = await read();
   // 중복 기간: 새 파일이 덮는 날짜의 기존 데이터는 삭제 → 새 파일 우선

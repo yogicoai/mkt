@@ -87,7 +87,7 @@ export async function GET(req) {
       return J({ ok: true, start, end, ...(await campaigns.query(start, end)) });
     }
 
-    // ── AI 기간 분석 ──
+    // ── 크리테오 (기간 + 광고세트별) ──
     if (p === '/api/criteo') {
       const now = new Date();
       const end = sp.get('end') || toYmd(now);
@@ -97,6 +97,7 @@ export async function GET(req) {
       return J({ ok: true, ...(await criteo.getBreakdown(start, end)) });
     }
 
+    // ── AI 기간 분석 ──
     if (p === '/api/ai-analyze') {
       const now = new Date();
       const end = (sp.get('end') || toYmd(now)).replace(/-/g, '');
@@ -301,6 +302,7 @@ export async function GET(req) {
 export async function POST(req) {
   const url = new URL(req.url);
   const p = url.pathname;
+  const sp = url.searchParams;
   try {
     // ── AI 분석 (Claude) — 레거시 단일 데이터 분석 ──
     if (p === '/api/analyze') {
@@ -310,10 +312,10 @@ export async function POST(req) {
       return J({ ok: true, ...out });
     }
 
-    // ── 캠페인 엑셀 업로드 → 저장 ──
+    // ── 캠페인 엑셀/CSV 업로드 → 저장 ──
     if (p === '/api/campaigns-upload') {
       const buf = Buffer.from(await req.arrayBuffer());
-      const r = await campaigns.parseUpload(buf);
+      const r = await campaigns.parseUpload(buf, { fallbackDate: sp.get('end') || sp.get('start') || '' });
       return J({ ok: true, ...r });
     }
 
@@ -331,7 +333,7 @@ export async function POST(req) {
       return J({ ok: true, data });
     }
 
-    // ── GFA 엑셀(.xlsx) 업로드 ──
+    // ── GFA 엑셀/CSV 업로드 ──
     if (p === '/api/gfa-upload') {
       const buf = Buffer.from(await req.arrayBuffer());
       const r = await gfa.uploadXlsx(buf);

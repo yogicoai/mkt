@@ -152,7 +152,7 @@
         <li><b>META</b> — 인스타·페북 캠페인별. 행 클릭 → 소재별, <b>썸네일 클릭 → 실제 광고 이미지 크게</b></li>
         <li><b>카카오</b> — 카카오모먼트 캠페인·메시지(플친) 성과 + 비즈월렛 잔액</li>
         <li><b>크리테오</b> — 광고주 승인 완료 시 자동 표시 (현재 승인 대기)</li>
-        <li><b>📥 GFA</b> — 엑셀(.xlsx)을 올리면 날짜·캠페인별로 정리해서 보여줘요</li>
+        <li><b>📥 GFA</b> — 엑셀(.xlsx) 또는 CSV(.csv)를 올리면 날짜·캠페인별로 정리해서 보여줘요</li>
         <li><b>🤖 AI 분석</b> — 기간을 정하면 AI가 그 기간 광고 성과를 평가하고 개선 방향을 제시</li>
       </ul>
 
@@ -264,7 +264,7 @@
   </div>
 
   <div class="tabpane" data-pane="camp" hidden>
-    <div id="camp"><div class="state" style="padding:40px">캠페인 엑셀을 업로드하면 기간별로 정리됩니다</div></div>
+    <div id="camp"><div class="state" style="padding:40px">캠페인 엑셀/CSV를 업로드하면 기간별로 정리됩니다</div></div>
   </div>
 
   <div class="tabpane" data-pane="ai" hidden>
@@ -501,10 +501,10 @@ function renderGfa(data){
   const rows=months.map(m=>{ const e=data[m]||{}; const roas=e.spend?Math.round((e.convValue||0)/e.spend*100):0;
     return '<tr><td style="text-align:left">'+m+'</td><td>'+won(e.spend||0)+'</td><td>'+won(e.convValue||0)+'</td><td><span class="roas '+cls(roas)+'">'+won(roas)+'%</span></td><td><button class="qb" data-gdel="'+m+'" style="padding:4px 9px;font-size:11px">삭제</button></td></tr>';
   }).join('');
-  el.innerHTML='<div class="panel"><h2>💠 GFA (성과형 디스플레이) — 엑셀 업로드</h2>'
-    +'<div style="font-size:11.5px;color:var(--tx3);margin-bottom:10px">GFA API는 파트너사 한정 베타라 미연동 상태예요. 네이버 GFA 콘솔에서 <b>월별(또는 일별) 광고비·전환매출</b> 엑셀을 받아 올리면 여기에 ROAS로 표시됩니다.</div>'
-    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><label class="qb" style="cursor:pointer">📑 엑셀(.xlsx) 업로드<input type="file" id="gFile" accept=".xlsx" style="display:none"></label><span id="gStat" style="font-size:11px;color:var(--tx3)"></span></div>'
-    +'<div style="font-size:10.5px;color:var(--tx3);margin-bottom:12px">엑셀 컬럼명에 <b>월</b>(또는 날짜·기간), <b>광고비</b>(비용), <b>전환매출</b>(매출)이 있으면 자동 인식 — 일별이어도 월 단위로 합산됩니다.</div>'
+  el.innerHTML='<div class="panel"><h2>💠 GFA (성과형 디스플레이) — 엑셀/CSV 업로드</h2>'
+    +'<div style="font-size:11.5px;color:var(--tx3);margin-bottom:10px">GFA API는 파트너사 한정 베타라 미연동 상태예요. 네이버 GFA 콘솔에서 <b>월별(또는 일별) 광고비·전환매출</b> 엑셀/CSV를 받아 올리면 여기에 ROAS로 표시됩니다.</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><label class="qb" style="cursor:pointer">📑 엑셀/CSV 업로드<input type="file" id="gFile" accept=".xlsx,.csv,text/csv" style="display:none"></label><span id="gStat" style="font-size:11px;color:var(--tx3)"></span></div>'
+    +'<div style="font-size:10.5px;color:var(--tx3);margin-bottom:12px">엑셀/CSV 컬럼명에 <b>월</b>(또는 날짜·기간), <b>광고비</b>(비용), <b>전환매출</b>(매출)이 있으면 자동 인식 — 일별이어도 월 단위로 합산됩니다.</div>'
     +'<table><thead><tr><th style="text-align:left">월</th><th>광고비</th><th>전환매출</th><th>ROAS</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">입력된 GFA 데이터 없음 — 위에서 추가하세요</td></tr>')+'</tbody></table></div>';
   const gf=$('#gFile'); if(gf) gf.addEventListener('change',async(e)=>{
     const f=e.target.files&&e.target.files[0]; if(!f) return;
@@ -519,7 +519,7 @@ function renderGfa(data){
   el.querySelectorAll('[data-gdel]').forEach(b=>b.addEventListener('click',async()=>{ await fetch('/api/gfa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:b.dataset.gdel,delete:true})}); loadGfa(); }));
 }
 
-// ── 📥 캠페인 엑셀 업로드 탭 ──
+// ── 📥 캠페인 엑셀/CSV 업로드 탭 ──
 let campLoaded=false;
 async function loadCamp(start,end){
   const qs=(start&&end)?('?start='+start.replace(/-/g,'')+'&end='+end.replace(/-/g,'')):'';
@@ -531,14 +531,14 @@ function renderCamp(j,start,end){
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const cls=v=>v>=300?'hi':v>=100?'mid':v>0?'lo':'na';
   const s=start||j.storedFrom||'', e=end||j.storedTo||'';
-  const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 GFA · 캠페인 엑셀 업로드 <span style="font-size:12px;color:var(--tx3)">날짜·캠페인별 지표 · 기간은 상단에서</span></div>'
+  const ctrl='<div class="panel" style="margin-bottom:14px"><div class="ct">📥 GFA · 캠페인 엑셀/CSV 업로드 <span style="font-size:12px;color:var(--tx3)">날짜·캠페인별 지표 · 기간은 상단에서</span></div>'
     +'<div style="font-size:11px;color:var(--tx3);margin:8px 0">조회 기간: <b>'+(s?(s+' ~ '+e):'전체')+'</b></div>'
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
-      +'<label class="qb" style="cursor:pointer">📑 엑셀(.xlsx) 선택<input type="file" id="cFile" accept=".xlsx" style="display:none"></label>'
+      +'<label class="qb" style="cursor:pointer">📑 엑셀/CSV 선택<input type="file" id="cFile" accept=".xlsx,.csv,text/csv" style="display:none"></label>'
       +'<button id="cSave" class="qb" style="background:var(--ac);color:#fff;border-color:var(--ac);opacity:.45;pointer-events:none">💾 DB에 저장</button>'
       +'<span id="cStat" style="font-size:11px;color:var(--tx3)"></span>'
     +'</div>'
-    +'<div class="glossary" style="margin:8px 0 0">컬럼 자동인식: <b>날짜·캠페인명·노출·클릭·광고비·CPC·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. '+(j.storedFrom?('저장됨: <b>'+j.storedFrom+' ~ '+j.storedTo+'</b> ('+(j.count||0)+'개 캠페인)'):'아직 업로드된 데이터가 없어요.')+' <b>중복 날짜는 새 파일로 교체</b>돼요.</div>'
+    +'<div class="glossary" style="margin:8px 0 0">컬럼 자동인식: <b>날짜/시작일/종료일·캠페인 이름·노출수·클릭수·총비용·구매완료수·장바구니수·구매전환매출·장바구니전환매출</b>. 날짜 컬럼이 없으면 상단 조회기간의 종료일로 저장돼요. '+(j.storedFrom?('저장됨: <b>'+j.storedFrom+' ~ '+j.storedTo+'</b> ('+(j.count||0)+'개 캠페인)'):'아직 업로드된 데이터가 없어요.')+' <b>중복 날짜는 새 파일로 교체</b>돼요.</div>'
     +(j.storedFrom?('<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">'
       +'<span style="font-size:11px;color:var(--tx3)">🗂 관리</span>'
       +'<input type="date" id="cDelStart" value="'+(j.storedFrom||'')+'" style="font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:6px">'
@@ -554,7 +554,7 @@ function renderCamp(j,start,end){
     +'<td>'+won(r.spend)+'</td><td>'+won(r.imp)+'</td><td>'+won(r.clk)+'</td><td>'+r.ctr+'%</td><td>'+won(r.cpc)+'</td>'
     +'<td>'+won(r.purch)+'</td><td>'+won(r.purchVal)+'</td><td><span class="roas '+cls(r.purchRoas)+'">'+won(r.purchRoas)+'%</span></td>'
     +'<td>'+won(r.cart)+'</td><td>'+won(r.cartVal)+'</td></tr>').join('')
-    : '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">이 기간 데이터 없음 — 엑셀을 업로드하세요</td></tr>';
+    : '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">이 기간 데이터 없음 — 엑셀/CSV를 업로드하세요</td></tr>';
   const t=j.totals||{};
   const foot=rows.length? '<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>'+won(t.spend)+'</td><td>'+won(t.imp)+'</td><td>'+won(t.clk)+'</td><td>'+(t.imp?(t.clk/t.imp*100).toFixed(2):0)+'%</td><td>'+(t.clk?won(Math.round(t.spend/t.clk)):0)+'</td><td>'+won(t.purch)+'</td><td>'+won(t.purchVal)+'</td><td>'+(t.spend?won(Math.round(t.purchVal/t.spend*100)):0)+'%</td><td>'+won(t.cart)+'</td><td>'+won(t.cartVal)+'</td></tr></tfoot>':'';
   const table='<div class="panel"><h2>캠페인별 '+(s?('('+s+' ~ '+e+')'):'(전체)')+' · '+rows.length+'개</h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
@@ -571,7 +571,7 @@ function renderCamp(j,start,end){
   if(cSave) cSave.addEventListener('click',async()=>{
     if(!_cFile) return;
     if(st){ st.textContent='저장 중…'; st.style.color='var(--tx3)'; } cSave.style.pointerEvents='none';
-    try{ const r=await fetch('/api/campaigns-upload',{method:'POST',body:_cFile}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
+    try{ const qs='?start='+encodeURIComponent(gStart||'')+'&end='+encodeURIComponent(gEnd||gStart||''); const r=await fetch('/api/campaigns-upload'+qs,{method:'POST',body:_cFile}); const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
       if(st){ st.textContent='✓ 저장됨 '+jj.added+'행'+(jj.replaced?(' · 중복 '+jj.replaced+'행 교체'):'')+' ('+jj.from+'~'+jj.to+')'; st.style.color='var(--ac)'; }
       _cFile=null; loadCamp(jj.from,jj.to);
     }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } cSave.style.pointerEvents='auto'; }

@@ -99,4 +99,47 @@ function parseXlsx(buf) {
   return parseSheet(readEntry(buf, entries[sheetName]).toString('utf8'), ss);
 }
 
-module.exports = { parseXlsx };
+function isXlsx(buf) {
+  return Buffer.isBuffer(buf) && buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50;
+}
+
+function decodeCsv(buf) {
+  const decoders = ['utf-8', 'euc-kr'].map((enc) => {
+    try { return new TextDecoder(enc, { fatal: false }).decode(buf); } catch (_) { return ''; }
+  });
+  return decoders
+    .map((text) => ({ text: text.replace(/^\uFEFF/, ''), score: (text.match(/[가-힣]/g) || []).length - (text.match(/\uFFFD/g) || []).length * 5 }))
+    .sort((a, b) => b.score - a.score)[0].text;
+}
+
+function guessDelimiter(text) {
+  const line = (text.split(/\r?\n/).find((x) => x.trim()) || '');
+  const counts = [',', '\t', ';'].map((d) => ({ d, n: (line.match(new RegExp(d === '\t' ? '\\t' : '\\' + d, 'g')) || []).length }));
+  counts.sort((a, b) => b.n - a.n);
+  return counts[0].n > 0 ? counts[0].d : ',';
+}
+
+function parseCsv(buf) {
+  const text = decodeCsv(buf);
+  const delimiter = guessDelimiter(text);
+  const rows = []; let row = [], cell = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"' && cell === '') quoted = true; // 따옴표는 필드 시작에서만 (RFC 4180) — 필드 중간 따옴표는 리터럴
+    else if (ch === delimiter) { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch !== '\r') cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
+}
+
+function parseRows(buf) {
+  return isXlsx(buf) ? parseXlsx(buf) : parseCsv(buf);
+}
+
+module.exports = { parseXlsx, parseCsv, parseRows };

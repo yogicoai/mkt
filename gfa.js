@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * GFA(성과형 디스플레이) 수동/엑셀 데이터 저장 — 파트너 API 미승인 대체.
+ * GFA(성과형 디스플레이) 수동/엑셀/CSV 데이터 저장 — 파트너 API 미승인 대체.
  * 월별 { spend, convValue, conv } 를 Mongo KV('gfa-manual')에 보관.
  * (기존 server.js 인라인 로직을 모듈로 추출 + 파일저장 → Mongo KV로 전환)
  */
-const { parseXlsx } = require('./xlsx-lite');
+const { parseRows } = require('./xlsx-lite');
 const { kvGet, kvSet } = require('./store');
 
 const KEY = 'gfa-manual';
@@ -32,7 +32,7 @@ async function setMonth(d) {
 }
 
 async function uploadXlsx(buf) {
-  const rows = parseXlsx(buf);
+  const rows = parseRows(buf);
   // 헤더행 + 컬럼 매핑 (앞 8행 스캔)
   let hi = -1, mC = -1, sC = -1, vC = -1;
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
