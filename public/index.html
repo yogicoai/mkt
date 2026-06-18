@@ -556,10 +556,7 @@ function renderCamp(j,start,end){
   const t=j.totals||{};
   const foot=rows.length? '<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>'+won(t.spend)+'</td><td>'+won(t.imp)+'</td><td>'+won(t.clk)+'</td><td>'+(t.imp?(t.clk/t.imp*100).toFixed(2):0)+'%</td><td>'+(t.clk?won(Math.round(t.spend/t.clk)):0)+'</td><td>'+won(t.purch)+'</td><td>'+won(t.purchVal)+'</td><td>'+(t.spend?won(Math.round(t.purchVal/t.spend*100)):0)+'%</td><td>'+won(t.cart)+'</td><td>'+won(t.cartVal)+'</td></tr></tfoot>':'';
   const table='<div class="panel"><h2>캠페인별 합계 · '+rows.length+'개 <span style="font-size:11px;color:var(--tx3);font-weight:500">(전체 파일 합산)</span></h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
-  const sumTable=(title,arr,keyName,keyLabel)=>(arr&&arr.length)?('<div class="panel"><h2>'+title+'</h2><table><thead><tr><th style="text-align:left">'+keyLabel+'</th><th>광고비</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+arr.map(r=>'<tr><td style="text-align:left">'+esc(String(r[keyName]))+'</td><td>'+won(r.spend)+'</td><td>'+won(r.purch)+'</td><td>'+won(r.purchVal)+'</td><td><span class="roas '+cls(r.purchRoas)+'">'+won(r.purchRoas)+'%</span></td><td>'+won(r.cart)+'</td><td>'+won(r.cartVal)+'</td></tr>').join('')+'</tbody></table></div>'):'';
-  const fileTable=sumTable('📁 파일(기간)별 합계 · '+((j.byFile||[]).length)+'개',j.byFile,'file','파일');
-  const monthTable=sumTable('🗓 월별 합계 <span style="font-size:11px;color:var(--tx3);font-weight:500">(캠페인 시작일 기준 · 참고용)</span>',j.byMonth,'month','월');
-  $('#camp').innerHTML=ctrl+table+fileTable+monthTable;
+  $('#camp').innerHTML=ctrl+table;
   // 기간 컨트롤은 상단 통합바로 일원화
   // 2단계: 파일 선택 → [💾 DB에 저장] 클릭으로 저장 (중복 날짜는 새 파일 우선)
   let _cFiles=[];
@@ -883,15 +880,17 @@ async function load(){
   content.innerHTML='<div class="state"><div class="spin"></div>네이버 API 조회 중…</div>';
   try{
     const prevDate = shiftYmd(date, -7); // 7일 전(같은 요일) 대비
-    const [sum, j, prev] = await Promise.all([
+    const [sum, j, prev, gfaResp] = await Promise.all([
       fetch('/api/summary?date='+date).then(r=>r.json()).catch(e=>({ok:false,error:String(e)})),
       fetch('/api/stats?start='+startYmd+'&end='+date).then(r=>r.json()),
       fetch('/api/summary?date='+prevDate).then(r=>r.json()).catch(()=>null),
+      fetch('/api/campaigns').then(r=>r.json()).catch(()=>null), // GFA(업로드) 누적 합계
     ]);
+    const gfaTot = (gfaResp && gfaResp.ok && gfaResp.totals) ? gfaResp.totals : null;
     lastSum = (sum && sum.ok) ? sum : null;
     lastStat = j;
     if(sum && sum.ok){
-      renderPlatforms(sum, (prev&&prev.ok)?prev:null);
+      renderPlatforms(sum, (prev&&prev.ok)?prev:null, gfaTot);
       // 실매출(Cafe24) 대조는 비동기로 — 통합표를 막지 않음
       fetch('/api/utm?start='+gEnd+'&end='+gEnd).then(r=>r.json()).then(u=>renderRealGap(sum,(u&&u.ok)?u.sales:null)).catch(()=>renderRealGap(sum,null));
     } else $('#platforms').innerHTML='';
@@ -906,7 +905,7 @@ async function load(){
   }finally{ const _gb=$('#pGo'); if(_gb) _gb.disabled=false; }
 }
 
-function renderPlatforms(d, prev){
+function renderPlatforms(d, prev, gfa){
   const rows=d.rows||[];
   const roas=(s,r)=> s? Math.round(r/s*100):0;
   const bal=v=> v==null? '<span style="color:#9aa3ad">–</span>' : won(v);
@@ -957,12 +956,16 @@ function renderPlatforms(d, prev){
     <td>${bal(r.balance)}</td></tr>`; };
   const disabled=(d.disabled||[]).length? `<div style="font-size:12px;color:var(--muted);margin-top:10px">⏳ 미연동(자격증명 대기): <b>${d.disabled.join(', ')}</b></div>`:'';
   const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
+  // GFA(업로드 누적) — 일자 데이터가 아니라 누적 합계라 합계엔 합치지 않고 별도 줄로 표시
+  const gR=gfa&&((gfa.spend||0)>0||(gfa.purchVal||0)>0), gRoas=gR?roas(gfa.spend,gfa.purchVal):0;
+  const gfaRow=gR? `<tr style="border-top:1px dashed var(--bd);background:var(--sf2)"><td><b>GFA</b> <span style="font-size:11px;color:#9aa3ad">📁 업로드 누적</span></td><td>${won(gfa.spend)}</td><td>${won(gfa.purch)}</td><td>${won(gfa.purchVal)}</td><td><span class="roas ${effTier(gfa.spend,gRoas).cls}">${won(gRoas)}%</span></td><td style="text-align:left;font-size:11.5px;color:var(--tx3)">업로드한 GFA 전체 합계 (기간 무관)</td><td>${bal(null)}</td></tr>`:'';
   $('#platforms').innerHTML=kpis+diag+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
     <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th style="text-align:left">진단·조언</th><th>잔액</th></tr></thead>
     <tbody>${rows.map(tr).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
-    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td></td><td>${won(sum.bal)}</td></tr>
+    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계 <span style="font-size:10px;color:var(--tx3);font-weight:500">(선택일·GFA 제외)</span></td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td></td><td>${won(sum.bal)}</td></tr>
+    ${gfaRow}
     </tbody></table>
-    <div class="glossary" style="margin:8px 0 0">💡 <b>진단</b>은 ROAS(전환매출÷광고비) 자동 신호 — 🟢 300%↑ 우수 · 🟡 100%↑ 본전 · 🔴 100% 미만/전환0 = 손해. 참고용(매체별 전환기준 차이 있음).</div>
+    <div class="glossary" style="margin:8px 0 0">💡 <b>진단</b>은 ROAS(전환매출÷광고비) 자동 신호 — 🟢 300%↑ 우수 · 🟡 100%↑ 본전 · 🔴 100% 미만/전환0 = 손해. 참고용(매체별 전환기준 차이 있음).${gR?' <b>GFA</b>는 업로드한 전체 누적이라 선택일 합계와 단위가 달라 합계에서 분리했어요(📥 GFA 탭에서 상세).':''}</div>
     ${disabled}${errs}</div>`;
 }
 
