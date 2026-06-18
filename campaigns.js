@@ -162,4 +162,4 @@ async function clearRange(start, end) {
   return { removed, totalRows: Object.keys(data).length };
 }
 
-module.exports = { parseUpload, query, clearAll, clearRange };
+module.exports = { parseUpload, parseUploadMany, query, clearAll, clearRange };
