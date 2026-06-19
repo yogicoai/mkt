@@ -110,7 +110,7 @@ module.exports = {
     catch (e) {
       if (e && e.code === 401) throw e;          // 토큰 만료/무효는 노출(재연결 필요)
       if (hit) return hit.data;                  // 429 등 일시 오류는 조용히 — 캐시 있으면 그걸
-      return [{ platform: '카카오모먼트', spend: 0, conversions: 0, convValue: 0, imp: 0, clk: 0, balance: bal, currency: 'KRW', note: '집계 대기' }]; // 0행이어도 잔액은 표시
+      return [{ platform: '카카오모먼트', spend: 0, conversions: 0, convValue: 0, buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0, imp: 0, clk: 0, balance: bal, currency: 'KRW', note: '집계 대기' }]; // 0행이어도 잔액은 표시
     }
     let spend = 0, imp = 0, click = 0, conv = 0, rev = 0;
     for (const row of (j.data || [])) {
@@ -120,7 +120,7 @@ module.exports = {
       click += (+m.click || 0) + (+m.msg_click || 0); // 메시지 클릭 포함
       conv += +m.conv_purchase_1d || 0; rev += +m.conv_purchase_p_1d || 0;
     }
-    const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), imp, clk: click, balance: bal, currency: 'KRW' }];
+    const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), buyCnt: Math.round(conv), buyVal: Math.round(rev), cartCnt: 0, cartVal: 0, imp, clk: click, balance: bal, currency: 'KRW' }];
     _sumCache.set(key, { at: Date.now(), data: rows });
     return rows;
   },

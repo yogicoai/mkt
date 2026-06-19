@@ -909,9 +909,9 @@ function renderPlatforms(d, prev, gfa){
   const rows=d.rows||[];
   const roas=(s,r)=> s? Math.round(r/s*100):0;
   const bal=v=> v==null? '<span style="color:#9aa3ad">–</span>' : won(v);
-  const sum=rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),conv:a.conv+(r.conversions||0),rev:a.rev+(r.convValue||0),bal:a.bal+(r.balance||0)}),{spend:0,conv:0,rev:0,bal:0});
+  const sum=rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),conv:a.conv+(r.conversions||0),rev:a.rev+(r.convValue||0),bal:a.bal+(r.balance||0),buyCnt:a.buyCnt+(r.buyCnt||0),buyVal:a.buyVal+(r.buyVal||0),cartCnt:a.cartCnt+(r.cartCnt||0),cartVal:a.cartVal+(r.cartVal||0)}),{spend:0,conv:0,rev:0,bal:0,buyCnt:0,buyVal:0,cartCnt:0,cartVal:0});
   // ── 헤드라인 요약 카드 + 7일 전 대비 ──
-  const p = (prev&&prev.rows) ? prev.rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),conv:a.conv+(r.conversions||0),rev:a.rev+(r.convValue||0)}),{spend:0,conv:0,rev:0}) : null;
+  const p = (prev&&prev.rows) ? prev.rows.reduce((a,r)=>({spend:a.spend+(r.spend||0),buyVal:a.buyVal+(r.buyVal||0),cartVal:a.cartVal+(r.cartVal||0)}),{spend:0,buyVal:0,cartVal:0}) : null;
   const dlt=(cur,pv,goodUp)=>{
     if(!p||pv==null) return '<span style="color:var(--tx3);font-size:11px">비교 데이터 없음</span>';
     if(pv===0) return cur>0?'<span style="color:#1B9C5A;font-size:11px;font-weight:700">신규 ▲</span> <span style="color:var(--tx3);font-size:10px">vs 7일전</span>':'<span style="color:var(--tx3);font-size:11px">변동 없음</span>';
@@ -919,26 +919,26 @@ function renderPlatforms(d, prev, gfa){
     const c=goodUp?(v>0?'#1B9C5A':v<0?'#E03131':'var(--tx3)'):'var(--tx3)';
     return `<span style="color:${c};font-size:11px;font-weight:700">${ar} ${Math.abs(r)}%</span> <span style="color:var(--tx3);font-size:10px">vs 7일전</span>`;
   };
-  const curRoas=roas(sum.spend,sum.rev), prevRoas=p?roas(p.spend,p.rev):null;
+  const curBuyRoas=roas(sum.spend,sum.buyVal), prevBuyRoas=p?roas(p.spend,p.buyVal):null;
   const kpis=`<div class="cards">
     <div class="card"><div class="lbl">총 광고비</div><div class="val">${won(sum.spend)}<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">${dlt(sum.spend,p?p.spend:null,false)}</div></div>
-    <div class="card accent"><div class="lbl">총 전환매출 <span style="font-weight:500;color:var(--tx3);font-size:11px">(매체 보고)</span></div><div class="val">${won(sum.rev)}<span style="font-size:14px">원</span></div><div class="sub">${dlt(sum.rev,p?p.rev:null,true)}</div></div>
-    <div class="card"><div class="lbl">통합 ROAS</div><div class="val" style="color:var(--green-d)">${won(curRoas)}%</div><div class="sub">${dlt(curRoas,prevRoas,true)}</div></div>
-    <div class="card"><div class="lbl">총 전환수</div><div class="val">${won(sum.conv)}<span style="font-size:14px;color:var(--muted)">건</span></div><div class="sub">${dlt(sum.conv,p?p.conv:null,true)}</div></div>
+    <div class="card accent"><div class="lbl">총 구매매출 <span style="font-weight:500;color:var(--tx3);font-size:11px">(실결제)</span></div><div class="val">${won(sum.buyVal)}<span style="font-size:14px">원</span></div><div class="sub">${dlt(sum.buyVal,p?p.buyVal:null,true)}</div></div>
+    <div class="card"><div class="lbl">총 장바구니매출 <span style="font-weight:500;color:var(--tx3);font-size:11px">(담기·참고)</span></div><div class="val">${won(sum.cartVal)}<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">${dlt(sum.cartVal,p?p.cartVal:null,true)}</div></div>
+    <div class="card"><div class="lbl">구매 ROAS</div><div class="val" style="color:var(--green-d)">${won(curBuyRoas)}%</div><div class="sub">${dlt(curBuyRoas,prevBuyRoas,true)}</div></div>
   </div>`;
   // ⑤⑥ 자동 진단 — 이상 경고 + 효자/부진 매체
   const prevByPlat={}; if(prev&&prev.rows) prev.rows.forEach(r=>{prevByPlat[r.platform]=r;});
   const alerts=[];
   rows.forEach(r=>{
-    if(r.spend>0 && (r.conversions||0)===0) alerts.push('🔴 <b>'+r.platform+'</b> 전환 0 — 광고비 '+won(r.spend)+'원');
+    if(r.spend>0 && ((r.buyCnt||0)+(r.cartCnt||0))===0) alerts.push('🔴 <b>'+r.platform+'</b> 전환 0 — 광고비 '+won(r.spend)+'원');
     if(r.balance!=null && r.balance>0 && r.spend>0 && r.balance<r.spend) alerts.push('⚠️ <b>'+r.platform+'</b> 잔액 부족 — '+won(r.balance)+'원 (1일 소진 미만)');
     const pr=prevByPlat[r.platform];
     if(pr){
       if(pr.spend>0 && r.spend>pr.spend*1.8) alerts.push('📈 <b>'+r.platform+'</b> 광고비 급증 +'+Math.round((r.spend/pr.spend-1)*100)+'% (7일전 대비)');
-      if(pr.convValue>0 && r.spend>0 && r.convValue<pr.convValue*0.5) alerts.push('📉 <b>'+r.platform+'</b> 매출 급락 '+Math.round((r.convValue/pr.convValue-1)*100)+'% (7일전 대비)');
+      if((pr.buyVal||0)>0 && r.spend>0 && (r.buyVal||0)<(pr.buyVal||0)*0.5) alerts.push('📉 <b>'+r.platform+'</b> 구매매출 급락 '+Math.round(((r.buyVal||0)/(pr.buyVal||0)-1)*100)+'% (7일전 대비)');
     }
   });
-  const act=rows.filter(r=>r.spend>0).map(r=>({platform:r.platform,spend:r.spend,R:roas(r.spend,r.convValue)}));
+  const act=rows.filter(r=>r.spend>0).map(r=>({platform:r.platform,spend:r.spend,R:roas(r.spend,r.buyVal||0)}));
   const win=act.filter(r=>r.R>0).sort((a,b)=>b.R-a.R)[0];
   const lose=act.filter(r=>r.spend>=10000).sort((a,b)=>a.R-b.R)[0];
   let actHtml='';
@@ -948,24 +948,25 @@ function renderPlatforms(d, prev, gfa){
     +(alerts.length?'<div style="display:flex;flex-direction:column;gap:4px;font-size:12.5px">'+alerts.map(a=>'<div style="background:#FFF3F3;border:1px solid #FAD4D4;border-radius:8px;padding:6px 10px">'+a+'</div>').join('')+'</div>':'<div style="color:#1B9C5A;font-size:12.5px;font-weight:600">✅ 경고 없음 — 전환·잔액·증감 정상</div>')
     +(actHtml?'<div style="margin-top:8px;font-size:12.5px;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:8px 10px">'+actHtml+'</div>':'')
     +'</div>'):'';
-  const tr=r=>{ const R=roas(r.spend,r.convValue), e=effTier(r.spend,R);
+  const tr=r=>{ const R=roas(r.spend,r.buyVal||0), e=effTier(r.spend,R);
     return `<tr><td><b>${r.platform}</b>${r.note?` <span style="font-size:11px;color:#9aa3ad">${r.note}</span>`:''}</td>
-    <td>${won(r.spend)}</td><td>${won(r.conversions)}</td><td>${won(r.convValue)}</td>
+    <td>${won(r.spend)}</td>
+    <td>${won(r.buyCnt||0)}</td><td>${won(r.buyVal||0)}</td>
+    <td style="color:var(--tx3)">${won(r.cartCnt||0)}</td><td style="color:var(--tx3)">${won(r.cartVal||0)}</td>
     <td><span class="roas ${e.cls}">${won(R)}%</span></td>
-    <td style="text-align:left;font-size:11.5px;font-weight:600">${e.advice}</td>
     <td>${bal(r.balance)}</td></tr>`; };
   const disabled=(d.disabled||[]).length? `<div style="font-size:12px;color:var(--muted);margin-top:10px">⏳ 미연동(자격증명 대기): <b>${d.disabled.join(', ')}</b></div>`:'';
   const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
   // GFA(업로드 누적) — 일자 데이터가 아니라 누적 합계라 합계엔 합치지 않고 별도 줄로 표시
-  const gR=gfa&&((gfa.spend||0)>0||(gfa.purchVal||0)>0), gRoas=gR?roas(gfa.spend,gfa.purchVal):0;
-  const gfaRow=gR? `<tr style="border-top:1px dashed var(--bd);background:var(--sf2)"><td><b>GFA</b> <span style="font-size:11px;color:#9aa3ad">📁 업로드 누적</span></td><td>${won(gfa.spend)}</td><td>${won(gfa.purch)}</td><td>${won(gfa.purchVal)}</td><td><span class="roas ${effTier(gfa.spend,gRoas).cls}">${won(gRoas)}%</span></td><td style="text-align:left;font-size:11.5px;color:var(--tx3)">업로드한 GFA 전체 합계 (기간 무관)</td><td>${bal(null)}</td></tr>`:'';
-  $('#platforms').innerHTML=kpis+diag+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 광고비 · 전환 · 진단</h2>
-    <table><thead><tr><th>플랫폼</th><th>광고비</th><th>전환수</th><th>전환매출</th><th>ROAS</th><th style="text-align:left">진단·조언</th><th>잔액</th></tr></thead>
-    <tbody>${rows.map(tr).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
-    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계 <span style="font-size:10px;color:var(--tx3);font-weight:500">(선택일·GFA 제외)</span></td><td>${won(sum.spend)}</td><td>${won(sum.conv)}</td><td>${won(sum.rev)}</td><td>${won(roas(sum.spend,sum.rev))}%</td><td></td><td>${won(sum.bal)}</td></tr>
+  const gR=gfa&&((gfa.spend||0)>0||(gfa.purchVal||0)>0||(gfa.cartVal||0)>0), gRoas=gR?roas(gfa.spend,gfa.purchVal):0;
+  const gfaRow=gR? `<tr style="border-top:1px dashed var(--bd);background:var(--sf2)"><td><b>GFA</b> <span style="font-size:11px;color:#9aa3ad">📁 업로드 누적</span></td><td>${won(gfa.spend)}</td><td>${won(gfa.purch)}</td><td>${won(gfa.purchVal)}</td><td style="color:var(--tx3)">${won(gfa.cart)}</td><td style="color:var(--tx3)">${won(gfa.cartVal)}</td><td><span class="roas ${effTier(gfa.spend,gRoas).cls}">${won(gRoas)}%</span></td><td>${bal(null)}</td></tr>`:'';
+  $('#platforms').innerHTML=kpis+diag+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 구매 · 장바구니 분리</h2>
+    <table><thead><tr><th>플랫폼</th><th>광고비</th><th>구매전환수</th><th>구매전환매출</th><th>🛒장바구니수</th><th>🛒장바구니매출</th><th>구매ROAS</th><th>잔액</th></tr></thead>
+    <tbody>${rows.map(tr).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
+    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계 <span style="font-size:10px;color:var(--tx3);font-weight:500">(선택일·GFA 제외)</span></td><td>${won(sum.spend)}</td><td>${won(sum.buyCnt)}</td><td>${won(sum.buyVal)}</td><td style="color:var(--tx3)">${won(sum.cartCnt)}</td><td style="color:var(--tx3)">${won(sum.cartVal)}</td><td>${won(roas(sum.spend,sum.buyVal))}%</td><td>${won(sum.bal)}</td></tr>
     ${gfaRow}
     </tbody></table>
-    <div class="glossary" style="margin:8px 0 0">💡 <b>진단</b>은 ROAS(전환매출÷광고비) 자동 신호 — 🟢 300%↑ 우수 · 🟡 100%↑ 본전 · 🔴 100% 미만/전환0 = 손해. 참고용(매체별 전환기준 차이 있음).${gR?' <b>GFA</b>는 업로드한 전체 누적이라 선택일 합계와 단위가 달라 합계에서 분리했어요(📥 GFA 탭에서 상세).':''}</div>
+    <div class="glossary" style="margin:8px 0 0">💡 <b>구매전환</b>=실결제(purchase) · <b>🛒장바구니</b>=담기(add_to_cart, 실매출 아님·참고) · <b>구매ROAS</b>=구매매출÷광고비. 매체별 효율 신호는 위 <b>⚡자동 진단</b> 참고. <b>네이버</b>는 당일 구매·장바구니 분해가 미제공이라 0으로 보일 수 있어요(어제 기준은 정상). <b>크리테오·카카오</b>는 장바구니 지표 미제공.${gR?' <b>GFA</b>는 업로드 누적이라 선택일 합계와 분리 표시.':''}</div>
     ${disabled}${errs}</div>`;
 }
 

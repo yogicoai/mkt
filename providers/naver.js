@@ -2,7 +2,7 @@
 
 // 네이버 검색광고 어댑터 — 리포트와 동일하게 키워드/쇼핑/브랜드 3매체로 분리
 // (전환·전환매출은 리포트 기준과 동일한 '총전환' = Stat API ccnt/convAmt)
-const { getCampaignStats, getBizmoney, missingEnv } = require('../naver-api');
+const { getCampaignStats, getBizmoney, missingEnv, getConversionBreakdown } = require('../naver-api');
 
 // 캠페인유형(campaignTp) → 표시 매체명
 const BUCKET = { WEB_SITE: '네이버 키워드', SHOPPING: '네이버 쇼핑', BRAND_SEARCH: '네이버 브랜드' };
@@ -15,18 +15,22 @@ module.exports = {
   bucketOf,
   enabled: () => missingEnv().length === 0,
   async getSummary(date) {
-    const [stats, biz] = await Promise.all([
+    const [stats, biz, conv] = await Promise.all([
       getCampaignStats(date),
       getBizmoney().catch(() => null),
+      getConversionBreakdown(date).catch(() => null), // 구매/장바구니 분해 (당일은 미제공 → null)
     ]);
+    const byCamp = (conv && conv.byCampaign) || {};
 
-    // 캠페인유형별 합산
+    // 캠페인유형별 합산 (+ 캠페인별 구매/장바구니 분해 병합)
     const agg = {};
     for (const r of (stats.rows || [])) {
       const k = bucketOf(r.tp);
-      const a = agg[k] || (agg[k] = { spend: 0, conversions: 0, convValue: 0, imp: 0, clk: 0 });
+      const a = agg[k] || (agg[k] = { spend: 0, conversions: 0, convValue: 0, imp: 0, clk: 0, buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 });
       a.spend += r.salesAmt || 0; a.conversions += r.ccnt || 0; a.convValue += r.convAmt || 0;
       a.imp += r.impCnt || 0; a.clk += r.clkCnt || 0;
+      const b = byCamp[r.id];
+      if (b) { a.buyCnt += b.buyCnt || 0; a.buyVal += b.buyVal || 0; a.cartCnt += b.cartCnt || 0; a.cartVal += b.cartVal || 0; }
     }
 
     const out = [];
@@ -38,6 +42,7 @@ module.exports = {
       out.push({
         platform: name,
         spend: a.spend, conversions: a.conversions, convValue: a.convValue,
+        buyCnt: a.buyCnt, buyVal: a.buyVal, cartCnt: a.cartCnt, cartVal: a.cartVal,
         // 잔액(비즈머니)은 계정 공통 → 첫 행에만 1회 표시(합계 중복 방지)
         balance: balShown ? null : (biz ? biz.bizmoney : null),
         currency: 'KRW',

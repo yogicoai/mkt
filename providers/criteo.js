@@ -157,6 +157,7 @@ module.exports = {
     return [{
       platform: '크리테오',
       spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev),
+      buyCnt: Math.round(conv), buyVal: Math.round(rev), cartCnt: 0, cartVal: 0, // 크리테오 sales=구매, 장바구니 별도 미제공
       balance: bal, currency: 'KRW', note: bal == null ? '잔액=Retail Media 연동시' : '',
     }];
   },

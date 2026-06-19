@@ -39,6 +39,14 @@ function pick(arr, type) {
     || arr.find((a) => a.action_type === 'offsite_conversion.fc_purchase');
   return hit ? +hit.value || 0 : 0;
 }
+// 여러 후보 action_type 중 첫 매치값 (구매/장바구니 분리 추출용)
+const PURCHASE_TYPES = ['omni_purchase', 'purchase', 'offsite_conversion.fc_purchase'];
+const CART_TYPES = ['omni_add_to_cart', 'add_to_cart', 'offsite_conversion.fc_add_to_cart'];
+function pickAny(arr, types) {
+  if (!Array.isArray(arr)) return 0;
+  for (const t of types) { const h = arr.find((a) => a.action_type === t); if (h) return +h.value || 0; }
+  return 0;
+}
 
 async function one(acc, date) {
   const since = dash(date);
@@ -49,6 +57,9 @@ async function one(acc, date) {
   const imp = Math.round(+row.impressions || 0), clk = Math.round(+row.clicks || 0);
   const conv = Math.round(pick(row.actions, PURCHASE));
   const rev = Math.round(pick(row.action_values, PURCHASE));
+  // 구매(purchase)·장바구니(add_to_cart) 분리
+  const buyCnt = Math.round(pickAny(row.actions, PURCHASE_TYPES)), buyVal = Math.round(pickAny(row.action_values, PURCHASE_TYPES));
+  const cartCnt = Math.round(pickAny(row.actions, CART_TYPES)), cartVal = Math.round(pickAny(row.action_values, CART_TYPES));
 
   let balance = null, note = '';
   try {
@@ -58,7 +69,7 @@ async function one(acc, date) {
     else if (a.balance != null) { balance = minor(a.balance, cur); note = '잔액=미청구액(한도 미설정)'; }
   } catch (_) { /* 잔액 실패는 무시 */ }
 
-  return { platform: acc.platform, spend, conversions: conv, convValue: rev, imp, clk, balance, currency: 'KRW', note };
+  return { platform: acc.platform, spend, conversions: conv, convValue: rev, buyCnt, buyVal, cartCnt, cartVal, imp, clk, balance, currency: 'KRW', note };
 }
 
 module.exports = {
