@@ -390,11 +390,11 @@ function renderMetaTab(j){
     const body=rows.length? rows.map(c=>'<tr class="meta-camp-row" data-acct="'+esc(a.id)+'" data-camp="'+esc(c.id)+'" data-name="'+esc(c.name)+'" style="cursor:pointer">'
       +'<td style="text-align:left">'+esc(c.name)+' <span class="lbadge">'+(/샐리필|sally/i.test(a.platform)?'오늘의집':'자사몰')+'</span> <span style="color:var(--ac);font-size:10px">▸소재</span></td>'
       +'<td>'+won(c.spend)+'</td><td>'+won(c.imp)+'</td><td>'+won(c.clk)+'</td><td>'+c.ctr+'%</td>'
-      +'<td>'+won(c.cart)+'</td><td>'+won(c.purch)+'</td><td>'+won(c.purchVal)+'</td>'
+      +'<td>'+won(c.purch)+'</td><td>'+won(c.purchVal)+'</td><td style="color:var(--tx3)">'+won(c.cart)+'</td><td style="color:var(--tx3)">'+won(c.cartVal)+'</td>'
       +'<td><span class="roas '+cls(c.roas)+'">'+won(c.roas)+'%</span></td></tr>').join('')
-      : '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:14px">이 기간 데이터 없음 — 상단에서 <b>기간</b>을 넓혀보세요 (예: 이번 달 · 최근 7일)</td></tr>';
+      : '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:14px">이 기간 데이터 없음 — 상단에서 <b>기간</b>을 넓혀보세요 (예: 이번 달 · 최근 7일)</td></tr>';
     html+='<div class="panel"><h2>'+esc(a.platform)+'</h2>'+cards
-      +'<table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>장바구니</th><th>구매</th><th>구매매출</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+      +'<table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>구매전환수</th><th>구매전환매출</th><th>🛒장바구니수</th><th>🛒장바구니매출</th><th>ROAS</th></tr></thead><tbody>'+body+'</tbody></table></div>';
   }
   $('#meta').innerHTML=html;
   // 기간 컨트롤은 상단 통합바로 일원화
@@ -421,12 +421,12 @@ function metaAdTable(j,name){
     const full=esc(x.image||x.thumb);
     const img=x.thumb?'<img src="'+esc(x.thumb)+'" data-full="'+full+'" class="meta-thumb" loading="lazy" onerror="this.style.display=&#39;none&#39;" style="width:42px;height:42px;border-radius:8px;object-fit:cover;flex:none" title="클릭하면 크게 보기">':'';
     const cell='<div style="display:flex;align-items:center;gap:9px">'+img+'<span style="line-height:1.35">'+esc(x.name)+'</span></div>';
-    return '<tr>'+td(cell,'left')+td(won(x.spend))+td(won(x.imp))+td(won(x.clk))+td(won(x.cart))+td(won(x.purch))+td(won(x.purchVal))+td('<span class="roas '+cls(x.roas)+'">'+won(x.roas)+'%</span>')+'</tr>';
+    return '<tr>'+td(cell,'left')+td(won(x.spend))+td(won(x.imp))+td(won(x.clk))+td(won(x.purch))+td(won(x.purchVal))+td(won(x.cart))+td(won(x.cartVal))+td('<span class="roas '+cls(x.roas)+'">'+won(x.roas)+'%</span>')+'</tr>';
   }).join('');
   const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
   return '<div style="font-weight:700;font-size:12px;margin-bottom:8px">🎨 '+esc(name)+' — 소재별 ('+j.count+'개)</div>'
     +'<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
-    +h('소재','left')+h('광고비')+h('노출')+h('클릭')+h('장바구니')+h('구매')+h('구매매출')+h('ROAS')
+    +h('소재','left')+h('광고비')+h('노출')+h('클릭')+h('구매수')+h('구매매출')+h('🛒장바구니수')+h('🛒장바구니매출')+h('ROAS')
     +'</tr></thead><tbody>'+body+'</tbody></table>';
 }
 
