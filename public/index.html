@@ -1175,14 +1175,17 @@ function agTable(j,name,tp){
     const nameCell='<span>'+esc(g.name)+'</span> <span style="color:var(--ac);font-size:10px">'+hint+'</span>';
     return '<tr class="ag-row" data-agid="'+esc(g.adgroupId)+'" data-agname="'+esc(g.name)+'" data-tp="'+esc(tp||'')+'" style="cursor:pointer">'
       +td(nameCell,'left')+td(agStatus(g.status),'left')+td(won(g.bidAmt)+'원')+td(url?'<span style="color:var(--tx3)">'+url+'</span>':'-','left')
-      +td(won(g.salesAmt))+td(won(g.impCnt))+td(won(g.clkCnt))+td(ctr+'%')+td(g.ccnt)+td('<span class="roas '+kwClass({ror:g.ror,salesAmt:g.salesAmt,ccnt:g.ccnt})+'">'+won(Math.round(g.ror))+'%</span>')
+      +td(won(g.salesAmt))+td(won(g.impCnt))+td(won(g.clkCnt))+td(ctr+'%')
+      +td(won(g.buyCnt||0))+td(won(g.buyVal||0))
+      +td('<span style="color:var(--tx3)">'+won(g.cartCnt||0)+'</span>')+td('<span style="color:var(--tx3)">'+won(g.cartVal||0)+'</span>')
+      +td('<span class="roas '+kwClass({ror:g.buyRoas||0,salesAmt:g.salesAmt,ccnt:g.buyCnt})+'">'+won(Math.round(g.buyRoas||0))+'%</span>')
       +'</tr>';
   }).join('');
   const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
   return '<div style="font-weight:700;font-size:12px;margin-bottom:3px">📂 '+esc(name)+' — 광고그룹별 ('+j.count+'개)</div>'+
-    '<div style="font-size:10.5px;color:var(--tx3);margin-bottom:8px">💡 그룹 클릭 → 그 그룹의 '+(isShop?'상품':'키워드')+' 펼침. 입찰가=클릭당 최대금액 · 연결=클릭 시 가는 페이지</div>'+
+    '<div style="font-size:10.5px;color:var(--tx3);margin-bottom:8px">💡 그룹 클릭 → 그 그룹의 '+(isShop?'상품':'키워드')+' 펼침. 구매·장바구니는 전환 분해 기준(당일은 0일 수 있음·어제 기준 정상)</div>'+
     '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'+
-    h('광고그룹','left')+h('상태','left')+h('입찰가')+h('연결','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('전환')+h('ROAS')+
+    h('광고그룹','left')+h('상태','left')+h('입찰가')+h('연결','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('구매')+h('구매매출')+h('🛒담기')+h('🛒매출')+h('구매ROAS')+
     '</tr></thead><tbody>'+body+'</tbody></table>';
 }
 function kwClass(k){ if(k.ror>=300) return 'hi'; if(k.salesAmt>0&&k.ccnt>0) return 'mid'; if(k.salesAmt>0) return 'lo'; return 'na'; }
@@ -1191,15 +1194,16 @@ function kwTable(j,name){
   const top=j.rows.slice(0,30);
   const td=(v,a)=>'<td style="text-align:'+(a||'right')+';padding:5px 6px;border-bottom:1px solid #eef1f8">'+v+'</td>';
   const body=top.map(k=>{
-    const cvr=k.clkCnt? (k.ccnt/k.clkCnt*100):0;
-    const cpa=k.ccnt? Math.round(k.salesAmt/k.ccnt):0;
-    return '<tr>'+td(k.keyword,'left')+td(won(k.salesAmt))+td(won(k.impCnt))+td(won(k.clkCnt))+td(k.ctr+'%')+td(won(k.cpc))+td(k.ccnt)+td(cvr.toFixed(1)+'%')+td(won(k.convAmt||0))+td(k.ccnt?won(cpa):'-')+td('<span class="roas '+kwClass(k)+'">'+won(Math.round(k.ror))+'%</span>')+td(k.avgRnk||'-')+'</tr>';
+    return '<tr>'+td(k.keyword,'left')+td(won(k.salesAmt))+td(won(k.impCnt))+td(won(k.clkCnt))+td(k.ctr+'%')+td(won(k.cpc))
+      +td(won(k.buyCnt||0))+td(won(k.buyVal||0))
+      +td('<span style="color:var(--tx3)">'+won(k.cartCnt||0)+'</span>')+td('<span style="color:var(--tx3)">'+won(k.cartVal||0)+'</span>')
+      +td('<span class="roas '+kwClass({ror:k.buyRoas||0,salesAmt:k.salesAmt,ccnt:k.buyCnt})+'">'+won(Math.round(k.buyRoas||0))+'%</span>')+td(k.avgRnk||'-')+'</tr>';
   }).join('');
   const h=(t,a)=>'<th style="text-align:'+(a||'right')+';padding:4px 6px;color:var(--tx3);font-size:9px">'+t+'</th>';
   const note=j.activeCount>30?('<div style="font-size:10px;color:var(--tx3);margin-top:6px">노출발생 '+j.activeCount+'개 중 광고비 상위 30개'+(j.truncated?' · ※키워드 매우 많아 일부만 조회':'')+'</div>'):'';
-  return '<div style="font-weight:700;font-size:11px;margin-bottom:8px">🔑 '+name+' — 키워드 효율 (광고비순, 노출발생 '+j.activeCount+'개)</div>'+
+  return '<div style="font-weight:700;font-size:11px;margin-bottom:8px">🔑 '+name+' — 키워드 효율 (광고비순, 노출발생 '+j.activeCount+'개) · 구매/장바구니는 전환분해 기준(당일 0 가능)</div>'+
     '<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'+
-    h('키워드','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('CPC')+h('전환')+h('전환율')+h('전환매출')+h('전환당비용')+h('ROAS')+h('순위')+
+    h('키워드','left')+h('광고비')+h('노출')+h('클릭')+h('CTR')+h('CPC')+h('구매')+h('구매매출')+h('🛒담기')+h('🛒매출')+h('구매ROAS')+h('순위')+
     '</tr></thead><tbody>'+body+'</tbody></table>'+note;
 }
 function prodTable(j,name){

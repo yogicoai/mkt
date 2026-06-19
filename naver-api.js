@@ -214,17 +214,25 @@ async function _computeConv(date) {
   if (status !== 'BUILT') return { status, byCampaign: null, totals: null };
   const res = await fetch(info.downloadUrl, { headers: authHeaders('GET', new URL(info.downloadUrl).pathname) });
   const tsv = await res.text();
-  const byCampaign = {};
+  const byCampaign = {}, byAdgroup = {}, byKeyword = {}; // 컬럼: [2]캠페인ID [3]광고그룹ID [4]키워드ID
   const totals = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
+  const add = (obj, key, type, cnt, val) => {
+    if (!key) return;
+    const o = obj[key] || (obj[key] = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 });
+    if (type === 'purchase') { o.buyCnt += cnt; o.buyVal += val; }
+    else if (type === 'add_to_cart') { o.cartCnt += cnt; o.cartVal += val; }
+  };
   for (const line of tsv.split(/\r?\n/)) {
     if (!line) continue;
     const a = line.split('\t');
-    const camp = a[2], type = a[10], cnt = +a[11] || 0, val = +a[12] || 0;
-    const o = byCampaign[camp] || (byCampaign[camp] = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 });
-    if (type === 'purchase') { o.buyCnt += cnt; o.buyVal += val; totals.buyCnt += cnt; totals.buyVal += val; }
-    else if (type === 'add_to_cart') { o.cartCnt += cnt; o.cartVal += val; totals.cartCnt += cnt; totals.cartVal += val; }
+    const type = a[10], cnt = +a[11] || 0, val = +a[12] || 0;
+    add(byCampaign, a[2], type, cnt, val);
+    add(byAdgroup, a[3], type, cnt, val);
+    add(byKeyword, a[4], type, cnt, val);
+    if (type === 'purchase') { totals.buyCnt += cnt; totals.buyVal += val; }
+    else if (type === 'add_to_cart') { totals.cartCnt += cnt; totals.cartVal += val; }
   }
-  return { status: 'BUILT', byCampaign, totals };
+  return { status: 'BUILT', byCampaign, byAdgroup, byKeyword, totals };
 }
 
 // 캠페인별 구매/장바구니 분해 (10분 캐시). 미완료(BUILT 전)는 캐시 안 함.
@@ -254,20 +262,17 @@ async function getConversionBreakdownRange(startStr, endStr) {
     if (ds < today) days.push(ds); // 오늘·미래 제외(리포트 미제공)
   }
   const results = await mapLimit(days, 4, (ds) => getConversionBreakdown(ds).catch(() => null));
-  const byCampaign = {}; const totals = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
+  const byCampaign = {}, byAdgroup = {}, byKeyword = {}; const totals = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
+  const merge = (dst, src) => { if (!src) return; for (const k of Object.keys(src)) { const o = src[k]; const t = dst[k] || (dst[k] = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 }); t.buyCnt += o.buyCnt; t.buyVal += o.buyVal; t.cartCnt += o.cartCnt; t.cartVal += o.cartVal; } };
   let daysBuilt = 0, daysMissing = 0;
   for (const r of results) {
     if (!r || !r.byCampaign) { daysMissing++; continue; }
     daysBuilt++;
-    for (const cid of Object.keys(r.byCampaign)) {
-      const o = r.byCampaign[cid];
-      const t = byCampaign[cid] || (byCampaign[cid] = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 });
-      t.buyCnt += o.buyCnt; t.buyVal += o.buyVal; t.cartCnt += o.cartCnt; t.cartVal += o.cartVal;
-    }
+    merge(byCampaign, r.byCampaign); merge(byAdgroup, r.byAdgroup); merge(byKeyword, r.byKeyword);
     totals.buyCnt += r.totals.buyCnt; totals.buyVal += r.totals.buyVal;
     totals.cartCnt += r.totals.cartCnt; totals.cartVal += r.totals.cartVal;
   }
-  return { status: daysBuilt ? 'BUILT' : 'NONE', byCampaign, totals, daysBuilt, daysMissing };
+  return { status: daysBuilt ? 'BUILT' : 'NONE', byCampaign, byAdgroup, byKeyword, totals, daysBuilt, daysMissing };
 }
 
 // 장바구니 전환(통합표용) — 위 분해에서 파생 (기존 시그니처 유지: conversions=장바구니수, convValue=장바구니매출)
@@ -473,12 +478,14 @@ async function getProductStatsForAdgroup(adgroupId, startStr, endStr) {
 // 캠페인의 광고그룹별 효율 (계층형 드릴다운 1단계). 입찰가·연결채널(URL) 포함.
 async function getAdgroupStats(campaignId, startStr, endStr) {
   const since = dash(startStr), until = dash(endStr || startStr);
-  const [ags, channels] = await Promise.all([
+  const [ags, channels, cvB] = await Promise.all([
     api('GET', '/ncc/adgroups', { query: { nccCampaignId: campaignId } }),
     api('GET', '/ncc/channels').catch(() => []),
+    getConversionBreakdownRange(startStr, endStr).catch(() => null), // 광고그룹별 구매/장바구니 분해
   ]);
   const chMap = {};
   for (const c of (channels || [])) chMap[c.nccBusinessChannelId] = c.channelKey || (c.businessInfo && c.businessInfo.site) || c.name || '';
+  const byAdg = (cvB && cvB.byAdgroup) || {};
 
   const F = ['impCnt', 'clkCnt', 'ctr', 'cpc', 'salesAmt', 'ccnt', 'convAmt', 'ror'];
   const ids = ags.map((a) => a.nccAdgroupId);
@@ -494,12 +501,15 @@ async function getAdgroupStats(campaignId, startStr, endStr) {
 
   const rows = ags.map((a) => {
     const s = stat[a.nccAdgroupId] || {};
+    const b = byAdg[a.nccAdgroupId] || { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
     const imp = +s.impCnt || 0, clk = +s.clkCnt || 0, spend = +s.salesAmt || 0, conv = +s.convAmt || 0;
     return {
       adgroupId: a.nccAdgroupId, name: a.name, status: a.status, bidAmt: +a.bidAmt || 0,
       channel: chMap[a.pcChannelId] || chMap[a.mobileChannelId] || '',
       impCnt: imp, clkCnt: clk, ctr: imp ? +(clk / imp * 100).toFixed(2) : 0, cpc: clk ? Math.round(spend / clk) : 0,
       salesAmt: spend, ccnt: +s.ccnt || 0, convAmt: conv, ror: spend ? Math.round(conv / spend * 100) : 0,
+      buyCnt: b.buyCnt, buyVal: b.buyVal, cartCnt: b.cartCnt, cartVal: b.cartVal,
+      buyRoas: spend ? Math.round(b.buyVal / spend * 100) : 0,
     };
   }).sort((a, b) => b.salesAmt - a.salesAmt);
 
@@ -509,7 +519,11 @@ async function getAdgroupStats(campaignId, startStr, endStr) {
 // 단일 광고그룹의 키워드별 효율 (계층형 드릴다운 2단계)
 async function getKeywordStatsForAdgroup(adgroupId, startStr, endStr) {
   const since = dash(startStr), until = dash(endStr || startStr);
-  const kws = await api('GET', '/ncc/keywords', { query: { nccAdgroupId: adgroupId } });
+  const [kws, cvB] = await Promise.all([
+    api('GET', '/ncc/keywords', { query: { nccAdgroupId: adgroupId } }),
+    getConversionBreakdownRange(startStr, endStr).catch(() => null), // 키워드별 구매/장바구니 분해
+  ]);
+  const byKw = (cvB && cvB.byKeyword) || {};
   const F = ['impCnt', 'clkCnt', 'ctr', 'cpc', 'salesAmt', 'ccnt', 'convAmt', 'ror', 'avgRnk'];
   const batches = [];
   for (let i = 0; i < kws.length; i += 100) batches.push(kws.slice(i, i + 100));
@@ -523,10 +537,12 @@ async function getKeywordStatsForAdgroup(adgroupId, startStr, endStr) {
   });
   const rows = kws.map((k) => {
     const s = stat[k.nccKeywordId] || {};
+    const b = byKw[k.nccKeywordId] || { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
     const imp = +s.impCnt || 0, clk = +s.clkCnt || 0, spend = +s.salesAmt || 0, conv = +s.convAmt || 0;
     return {
       keyword: k.keyword, impCnt: imp, clkCnt: clk, ctr: imp ? +(clk / imp * 100).toFixed(2) : 0, cpc: clk ? Math.round(spend / clk) : 0,
       salesAmt: spend, ccnt: +s.ccnt || 0, convAmt: conv, ror: spend ? Math.round(conv / spend * 100) : 0, avgRnk: +s.avgRnk || 0,
+      buyCnt: b.buyCnt, buyVal: b.buyVal, cartCnt: b.cartCnt, cartVal: b.cartVal, buyRoas: spend ? Math.round(b.buyVal / spend * 100) : 0,
     };
   }).filter((r) => r.impCnt > 0).sort((a, b) => b.salesAmt - a.salesAmt);
   return { adgroupId, date: startStr, start: startStr, end: endStr || startStr, keywordCount: kws.length, activeCount: rows.length, rows };
