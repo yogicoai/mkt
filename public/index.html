@@ -546,16 +546,17 @@ function renderCamp(j,start,end){
       +'<button id="cClear" class="qb" style="font-size:11px;color:#E03131;border-color:#F3C0C0">전체 삭제</button>'
     +'</div>'):'')
     +'</div>';
-  const rows=j.rows||[];
+  const rows=j.daily||[];
   const body=rows.length? rows.map(r=>'<tr>'
+    +'<td style="text-align:left;white-space:nowrap;font-variant-numeric:tabular-nums">'+esc(r.date)+'</td>'
     +'<td style="text-align:left">'+esc(r.campaign)+'</td>'
     +'<td>'+won(r.spend)+'</td><td>'+won(r.imp)+'</td><td>'+won(r.clk)+'</td><td>'+r.ctr+'%</td><td>'+won(r.cpc)+'</td>'
     +'<td>'+won(r.purch)+'</td><td>'+won(r.purchVal)+'</td><td><span class="roas '+cls(r.purchRoas)+'">'+won(r.purchRoas)+'%</span></td>'
-    +'<td>'+won(r.cart)+'</td><td>'+won(r.cartVal)+'</td></tr>').join('')
-    : '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:16px">이 기간 데이터 없음 — 엑셀/CSV를 업로드하세요</td></tr>';
+    +'<td style="color:var(--tx3)">'+won(r.cart)+'</td><td style="color:var(--tx3)">'+won(r.cartVal)+'</td></tr>').join('')
+    : '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px">이 기간 데이터 없음 — 엑셀/CSV를 업로드하세요</td></tr>';
   const t=j.totals||{};
-  const foot=rows.length? '<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td>'+won(t.spend)+'</td><td>'+won(t.imp)+'</td><td>'+won(t.clk)+'</td><td>'+(t.imp?(t.clk/t.imp*100).toFixed(2):0)+'%</td><td>'+(t.clk?won(Math.round(t.spend/t.clk)):0)+'</td><td>'+won(t.purch)+'</td><td>'+won(t.purchVal)+'</td><td>'+(t.spend?won(Math.round(t.purchVal/t.spend*100)):0)+'%</td><td>'+won(t.cart)+'</td><td>'+won(t.cartVal)+'</td></tr></tfoot>':'';
-  const table='<div class="panel"><h2>캠페인별 합계 · '+rows.length+'개 <span style="font-size:11px;color:var(--tx3);font-weight:500">(전체 파일 합산)</span></h2><table><thead><tr><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>장바구니</th><th>장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
+  const foot=rows.length? '<tfoot><tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계</td><td></td><td>'+won(t.spend)+'</td><td>'+won(t.imp)+'</td><td>'+won(t.clk)+'</td><td>'+(t.imp?(t.clk/t.imp*100).toFixed(2):0)+'%</td><td>'+(t.clk?won(Math.round(t.spend/t.clk)):0)+'</td><td>'+won(t.purch)+'</td><td>'+won(t.purchVal)+'</td><td>'+(t.spend?won(Math.round(t.purchVal/t.spend*100)):0)+'%</td><td style="color:var(--tx3)">'+won(t.cart)+'</td><td style="color:var(--tx3)">'+won(t.cartVal)+'</td></tr></tfoot>':'';
+  const table='<div class="panel"><h2>일자별 캠페인 · '+rows.length+'건 <span style="font-size:11px;color:var(--tx3);font-weight:500">('+(j.storedFrom?(j.storedFrom+' ~ '+j.storedTo):'전체')+' · 날짜순)</span></h2><table><thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">캠페인</th><th>광고비</th><th>노출</th><th>클릭</th><th>CTR</th><th>CPC</th><th>구매</th><th>구매매출</th><th>구매ROAS</th><th>🛒장바구니</th><th>🛒장바구니매출</th></tr></thead><tbody>'+body+'</tbody>'+foot+'</table></div>';
   $('#camp').innerHTML=ctrl+table;
   // 기간 컨트롤은 상단 통합바로 일원화
   // 2단계: 파일 선택 → [💾 DB에 저장] 클릭으로 저장 (중복 날짜는 새 파일 우선)

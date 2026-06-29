@@ -133,13 +133,14 @@ async function parseUploadMany(buffers, opts = {}) {
 async function query(start, end) {
   const data = await read();
   const s = start || '0000-00-00', e = end || '9999-99-99';
-  const agg = {}; const fileAgg = {}; const monthAgg = {}; let minD = null, maxD = null;
+  const agg = {}; const fileAgg = {}; const monthAgg = {}; const daily = []; let minD = null, maxD = null;
   const blank = () => ({ imp: 0, clk: 0, spend: 0, purch: 0, cart: 0, purchVal: 0, cartVal: 0 });
   const addInto = (o, r) => { o.imp += r.imp; o.clk += r.clk; o.spend += r.spend; o.purch += r.purch; o.cart += r.cart; o.purchVal += r.purchVal; o.cartVal += r.cartVal; };
   for (const k of Object.keys(data)) {
     const r = data[k];
     if (r.date) { if (!minD || r.date < minD) minD = r.date; if (!maxD || r.date > maxD) maxD = r.date; }
     if (r.date < s || r.date > e) continue;
+    daily.push(r); // 날짜+캠페인 원행(일자별 표용)
     addInto(agg[r.campaign] || (agg[r.campaign] = Object.assign({ campaign: r.campaign }, blank())), r);
     if (r.source) addInto(fileAgg[r.source] || (fileAgg[r.source] = Object.assign({ file: r.source }, blank())), r);
     const mon = (r.date || '').slice(0, 7);
@@ -147,10 +148,11 @@ async function query(start, end) {
   }
   const withRoas = (o) => ({ ...o, ctr: o.imp ? +(o.clk / o.imp * 100).toFixed(2) : 0, cpc: o.clk ? Math.round(o.spend / o.clk) : 0, purchRoas: o.spend ? Math.round(o.purchVal / o.spend * 100) : 0, cartRoas: o.spend ? Math.round(o.cartVal / o.spend * 100) : 0, cpa: o.purch ? Math.round(o.spend / o.purch) : 0 });
   const rows = Object.values(agg).map(withRoas).sort((a, b) => b.spend - a.spend);
+  const dailyRows = daily.map(withRoas).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.spend - a.spend)); // 날짜 내림차순
   const byFile = Object.values(fileAgg).map(withRoas).sort((a, b) => b.spend - a.spend);
   const byMonth = Object.values(monthAgg).map(withRoas).sort((a, b) => a.month < b.month ? -1 : 1);
   const totals = rows.reduce((a, r) => ({ imp: a.imp + r.imp, clk: a.clk + r.clk, spend: a.spend + r.spend, purch: a.purch + r.purch, cart: a.cart + r.cart, purchVal: a.purchVal + r.purchVal, cartVal: a.cartVal + r.cartVal }), blank());
-  return { rows, byFile, byMonth, totals, storedFrom: minD, storedTo: maxD, count: rows.length };
+  return { rows, daily: dailyRows, byFile, byMonth, totals, storedFrom: minD, storedTo: maxD, count: rows.length, dailyCount: dailyRows.length };
 }
 
 async function clearAll() { await write({}); return { cleared: true, totalRows: 0 }; }
