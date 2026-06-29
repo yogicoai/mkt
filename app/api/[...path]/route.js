@@ -35,6 +35,28 @@ export async function GET(req) {
       return J({ ok: true, ...data });
     }
 
+    // ── 광고 데이터 일일 자동 수집 (Vercel Cron) ──
+    //   대시보드를 아무도 안 열어도 매일 채워지게: 최근 N일(기본 3일) 전 매체를 재수집해 daily_stats 멱등 upsert.
+    //   최근일은 플랫폼 확정 지연이 있어 매일 재수집해 보정(부분 적재 → 완성). CRON_SECRET 설정 시 Bearer 인증.
+    if (p === '/api/cron/backfill') {
+      const auth = req.headers.get('authorization') || '';
+      if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) return J({ ok: false, error: 'unauthorized' }, 401);
+      if (!store.configured()) return J({ ok: false, error: 'MONGODB_URI 미설정' }, 400);
+      const days = Math.max(1, Math.min(7, +(sp.get('days') || 3)));
+      const base = new Date();
+      const collected = [];
+      for (let i = 0; i < days; i++) {
+        const dt = new Date(base); dt.setDate(base.getDate() - i);
+        const date = toYmd(dt).replace(/-/g, '');
+        try {
+          const data = await providers.getAllSummaries(date);
+          await store.saveDaily(date, data.rows);
+          collected.push({ date, rows: data.rows.length, spend: data.rows.reduce((s, r) => s + (+r.spend || 0), 0), errors: data.errors, disabled: data.disabled });
+        } catch (e) { collected.push({ date, error: e.message }); }
+      }
+      return J({ ok: true, at: new Date().toISOString(), days, collected });
+    }
+
     // ── 일자별 추이 (MongoDB daily_stats) ──
     if (p === '/api/trend') {
       if (!store.configured()) return J({ ok: false, error: 'MONGODB_URI 미설정' }, 400);

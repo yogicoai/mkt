@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/cron/backfill", "schedule": "30 0 * * *" }
+  ]
+}
