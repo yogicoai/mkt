@@ -297,7 +297,7 @@ function loadTab(t){
   if(t==='all'||t==='naver'){ load(); tabPeriod['all']=tabPeriod['naver']=periodKey(); return; }
   if(t==='utm') loadUtm(gStart,gEnd);
   else if(t==='meta') loadMeta(gStart,gEnd);
-  else if(t==='camp') loadCamp();
+  else if(t==='camp') loadCamp(gStart,gEnd);
   else if(t==='kakao') loadKakao();
   else if(t==='criteo') loadCriteo(gStart,gEnd);
   else if(t==='ai') renderAiSetup();
@@ -579,7 +579,7 @@ function renderCamp(j,start,end){
       const failed=(jj.perFile||[]).filter(f=>!f.ok);
       if(failed.length) msg+=' · ⚠️ 실패 '+failed.length+'개: '+failed.map(f=>f.name+'('+f.error+')').join('; ');
       if(st){ st.textContent=msg; st.style.color=failed.length?'#C2710C':'var(--ac)'; }
-      _cFiles=[]; loadCamp();
+      _cFiles=[]; loadCamp(gStart,gEnd);
     }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } cSave.style.pointerEvents='auto'; }
   });
   const cClear=$('#cClear'); if(cClear) cClear.addEventListener('click',async()=>{
