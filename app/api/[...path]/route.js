@@ -300,6 +300,7 @@ export async function GET(req) {
         ok: true, customerId: naver.CUSTOMER, bizmoney: biz,
         convBuilt: !!(conv && conv.byCampaign && (conv.daysBuilt == null || conv.daysBuilt > 0)),
         convDaysMissing: conv && conv.daysMissing != null ? conv.daysMissing : null,
+        convDaysSkipped: conv && conv.daysSkipped ? conv.daysSkipped : 0,
         ...data,
       });
     }

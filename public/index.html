@@ -1034,6 +1034,7 @@ function render(j){
 
   content.innerHTML = `
     ${j.convBuilt===false?(gEnd===ymd(new Date())?'<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">ℹ️ <b>오늘(당일)</b>은 네이버가 구매·장바구니 전환데이터를 아직 집계하지 않아요(당일 전환보고서 미제공). 상단에서 <b>어제</b>로 보면 구매·장바구니가 나옵니다. <span style="color:var(--tx3)">(노출·클릭·광고비는 오늘도 정상)</span></div>':'<div class="err" style="margin:0 0 10px">⚠ 구매 전환 보고서 생성이 지연되고 있어요 — 잠시 후 다시 조회하세요.</div>'):(j.convDaysMissing>0?'<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">ℹ️ 기간 중 <b>'+j.convDaysMissing+'일</b>(오늘 등)은 네이버 당일 전환보고서 미제공으로 <b>구매·장바구니 분해</b>에서 빠졌어요. <span style="color:var(--tx3)">(광고비·노출·클릭·총전환은 전체 기간 정상)</span></div>':'')}
+    ${j.convDaysSkipped>0?'<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">ℹ️ 기간이 길어 <b>구매·장바구니 분해는 최근 62일</b>만 집계했어요(무한로딩 방지). <span style="color:var(--tx3)">광고비·노출·클릭·총전환은 전체 기간 정상. 더 정밀히 보려면 기간을 좁혀주세요.</span></div>':''}
     <div class="cards">
       <div class="card accent"><div class="lbl">💰 비즈머니 잔액</div><div class="val">${won(j.bizmoney? j.bizmoney.bizmoney:0)}<span style="font-size:14px">원</span></div><div class="sub">${j.bizmoney&&j.bizmoney.budgetLock?'⚠️ 예산잠금 상태':'네이버 광고 잔액'}</div></div>
       <div class="card"><div class="lbl">광고비 (소진)</div><div class="val">${won(t.salesAmt)}<span style="font-size:14px;color:var(--muted)">원</span></div><div class="sub">노출발생 ${t.activeCount} / 전체 ${t.totalCount}개</div></div>

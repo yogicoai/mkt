@@ -256,12 +256,16 @@ async function getConversionBreakdownRange(startStr, endStr) {
   const now = new Date();
   const today = '' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
   const mk = (s) => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
-  const days = [];
+  let days = [];
   for (let d = mk(start); d <= mk(end); d.setDate(d.getDate() + 1)) {
     const ds = '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
     if (ds < today) days.push(ds); // 오늘·미래 제외(리포트 미제공)
   }
-  const results = await mapLimit(days, 4, (ds) => getConversionBreakdown(ds).catch(() => null));
+  // 일별 리포트는 하루당 1회 빌드라 기간이 길면 무한로딩 → 최근 MAX_DAYS일로 상한(나머지는 분해 생략, 총전환·광고비는 기간 전체 정상)
+  const MAX_DAYS = 62;
+  let daysSkipped = 0;
+  if (days.length > MAX_DAYS) { daysSkipped = days.length - MAX_DAYS; days = days.slice(-MAX_DAYS); }
+  const results = await mapLimit(days, 6, (ds) => getConversionBreakdown(ds).catch(() => null));
   const byCampaign = {}, byAdgroup = {}, byKeyword = {}; const totals = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 };
   const merge = (dst, src) => { if (!src) return; for (const k of Object.keys(src)) { const o = src[k]; const t = dst[k] || (dst[k] = { buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0 }); t.buyCnt += o.buyCnt; t.buyVal += o.buyVal; t.cartCnt += o.cartCnt; t.cartVal += o.cartVal; } };
   let daysBuilt = 0, daysMissing = 0;
@@ -272,7 +276,7 @@ async function getConversionBreakdownRange(startStr, endStr) {
     totals.buyCnt += r.totals.buyCnt; totals.buyVal += r.totals.buyVal;
     totals.cartCnt += r.totals.cartCnt; totals.cartVal += r.totals.cartVal;
   }
-  return { status: daysBuilt ? 'BUILT' : 'NONE', byCampaign, byAdgroup, byKeyword, totals, daysBuilt, daysMissing };
+  return { status: daysBuilt ? 'BUILT' : 'NONE', byCampaign, byAdgroup, byKeyword, totals, daysBuilt, daysMissing, daysSkipped };
 }
 
 // 장바구니 전환(통합표용) — 위 분해에서 파생 (기존 시그니처 유지: conversions=장바구니수, convValue=장바구니매출)

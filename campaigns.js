@@ -94,7 +94,7 @@ async function parseUpload(buf, opts = {}) {
 // 여러 파일 일괄 업로드 — 파일(source)별로 저장.
 //  · 캠페인은 파일 간 합산(query에서 캠페인명 기준 합) → 파일마다 다른 기간이어도 누락 없이 더해짐
 //  · 같은 파일(파일명)을 다시 올리면 그 파일 행만 삭제 후 교체 → 같은 데이터가 쌓이지 않음
-//  · 키 = 파일명 + 캠페인명 (같은 캠페인이 여러 파일에 있어도 각각 보존)
+//  · 키 = 파일명 + 날짜 + 캠페인명 (일자별 행 보존 — 같은 캠페인의 여러 날짜가 안 합쳐짐)
 async function parseUploadMany(buffers, opts = {}) {
   const list = Array.isArray(buffers) ? buffers : [buffers];
   const names = opts.names || [];
@@ -106,7 +106,7 @@ async function parseUploadMany(buffers, opts = {}) {
       const rows = parseOne(list[i], { ...opts, source: name });
       newSources.add(name);
       for (const r of rows) {
-        const key = name + '\t' + r.campaign;
+        const key = name + '\t' + r.date + '\t' + r.campaign;
         const ex = incoming[key];
         if (ex) { ex.imp += r.imp; ex.clk += r.clk; ex.spend += r.spend; ex.purch += r.purch; ex.cart += r.cart; ex.purchVal += r.purchVal; ex.cartVal += r.cartVal; }
         else incoming[key] = { ...r };
