@@ -99,18 +99,13 @@ async function parseUploadMany(buffers, opts = {}) {
   const list = Array.isArray(buffers) ? buffers : [buffers];
   const names = opts.names || [];
   const data = await read();
-  const incoming = {}; const newSources = new Set(); const perFile = []; let okFiles = 0;
+  const incoming = {}; const perFile = []; let okFiles = 0;
   for (let i = 0; i < list.length; i++) {
     const name = names[i] || ('파일' + (i + 1));
     try {
       const rows = parseOne(list[i], { ...opts, source: name });
-      newSources.add(name);
-      for (const r of rows) {
-        const key = name + '\t' + r.date + '\t' + r.campaign;
-        const ex = incoming[key];
-        if (ex) { ex.imp += r.imp; ex.clk += r.clk; ex.spend += r.spend; ex.purch += r.purch; ex.cart += r.cart; ex.purchVal += r.purchVal; ex.cartVal += r.cartVal; }
-        else incoming[key] = { ...r };
-      }
+      // 키 = 날짜+캠페인. 같은 날짜+캠페인이면 최신(뒤 파일/행)으로 덮어씀(합산·중복 X)
+      for (const r of rows) incoming[r.date + '\t' + r.campaign] = { ...r };
       okFiles++;
       perFile.push({ name, rows: rows.length, ok: true });
     } catch (e) {
@@ -121,13 +116,17 @@ async function parseUploadMany(buffers, opts = {}) {
     const errs = perFile.filter((f) => !f.ok).map((f) => f.name + ': ' + f.error).join(' / ');
     throw new Error('업로드된 파일에서 저장할 데이터를 찾지 못했어요.' + (errs ? ' (' + errs + ')' : ''));
   }
-  // 같은 파일(source) 재업로드 → 기존 그 파일 행 삭제(중복 누적 방지)
+  // 동일 날짜+캠페인은 무조건 최신 데이터로 교체 — 기존 행 삭제(키 형식 무관) 후 새 행 삽입
+  const incKeys = new Set(Object.keys(incoming));
   let replaced = 0;
-  for (const k of Object.keys(data)) { const r = data[k]; if (r && r.source && newSources.has(r.source)) { delete data[k]; replaced++; } }
+  for (const k of Object.keys(data)) {
+    const r = data[k];
+    const dk = (r && r.date != null) ? (r.date + '\t' + r.campaign) : k;
+    if (incKeys.has(dk)) { delete data[k]; replaced++; }
+  }
   Object.assign(data, incoming);
   await write(data);
-  const sources = new Set(Object.values(data).map((r) => r && r.source).filter(Boolean));
-  return { files: list.length, okFiles, replaced, added: Object.keys(incoming).length, totalRows: Object.keys(data).length, fileCount: sources.size, perFile };
+  return { files: list.length, okFiles, replaced, added: Object.keys(incoming).length, totalRows: Object.keys(data).length, perFile };
 }
 
 async function query(start, end) {
