@@ -37,13 +37,14 @@ function parseOne(buf, opts = {}) {
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
     const r = rows[i] || [];
     const d = find(r, /날짜|일자|^date$/i);
+    const period = find(r, /기간|period|date\s*range/i, /목적|예산|상태|유형|구분/i); // 'GFA 기간' 컬럼 = 그 데이터의 보고기간
     const end = find(r, /종료일|종료날짜|end\s*date/i);
     const start = find(r, /시작일|시작날짜|start\s*date/i);
     const c = find(r, /캠페인(명|이름)?|광고명|campaign(name)?/i, /id|번호|유형|상태/i);
-    if ((d >= 0 || uploadDate || end >= 0 || start >= 0) && c >= 0) {
+    if ((d >= 0 || period >= 0 || end >= 0 || start >= 0 || uploadDate) && c >= 0) {
       hi = i;
       col = {
-        date: d, endDate: end, startDate: start, camp: c,
+        date: d, period, endDate: end, startDate: start, camp: c,
         imp: find(r, /노출|impression/i), clk: find(r, /클릭|click/i),
         spend: find(r, /광고비|총비용|총\s*비용|소진|cost|spend|^비용/i),
         purch: find(r, /구매.*(완료)?(수|건)|전환수|purchase/i, /매출|금액|value|revenue|총|앱/i), // '총 전환수'·'앱 내 구매완료 수' 제외 → 순수 '구매완료 수'
@@ -58,8 +59,8 @@ function parseOne(buf, opts = {}) {
   const out = [];
   for (let i = hi + 1; i < rows.length; i++) {
     const r = rows[i] || [];
-    // 파일의 날짜(날짜→종료일→시작일)를 우선, 없을 때만 조회기간 종료일(uploadDate)로 폴백
-    const date = (col.date >= 0 ? normDate(r[col.date]) : '') || normDate(r[col.endDate]) || normDate(r[col.startDate]) || uploadDate;
+    // 날짜→기간→종료일→시작일을 우선, 없을 때만 조회기간 종료일(uploadDate)로 폴백
+    const date = (col.date >= 0 ? normDate(r[col.date]) : '') || (col.period >= 0 ? normDate(r[col.period]) : '') || normDate(r[col.endDate]) || normDate(r[col.startDate]) || uploadDate;
     const camp = String(r[col.camp] == null ? '' : r[col.camp]).trim();
     if (!date || !camp) continue;
     out.push({
