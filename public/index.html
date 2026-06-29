@@ -575,11 +575,14 @@ function renderCamp(j,start,end){
       const qs='?start='+encodeURIComponent(gStart||'')+'&end='+encodeURIComponent(gEnd||gStart||'');
       const r=await fetch('/api/campaigns-upload'+qs,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:b64,names:_cFiles.map(f=>f.name)})});
       const jj=await r.json(); if(!jj.ok) throw new Error(jj.error||'실패');
-      let msg='✓ '+(jj.okFiles||0)+'/'+(jj.files||0)+'개 파일 저장 · '+won(jj.added)+'건'+(jj.replaced?(' · 기존 '+won(jj.replaced)+'건 교체'):'')+' (누적 '+won(jj.totalRows||0)+'건 / '+(jj.fileCount||0)+'개 파일)';
-      const failed=(jj.perFile||[]).filter(f=>!f.ok);
-      if(failed.length) msg+=' · ⚠️ 실패 '+failed.length+'개: '+failed.map(f=>f.name+'('+f.error+')').join('; ');
-      if(st){ st.textContent=msg; st.style.color=failed.length?'#C2710C':'var(--ac)'; }
-      _cFiles=[]; loadCamp(gStart,gEnd);
+      const okFiles=jj.okFiles||0, files=jj.files||0; const failed=(jj.perFile||[]).filter(f=>!f.ok);
+      let msg='✅ 저장 완료! '+okFiles+'/'+files+'개 파일 · '+won(jj.added)+'건 저장'+(jj.replaced?(' · 기존 '+won(jj.replaced)+'건 교체'):'')+' (누적 '+won(jj.totalRows||0)+'건)';
+      let alertMsg='✅ 저장이 완료되었습니다.\n\n'+okFiles+'/'+files+'개 파일 · '+won(jj.added)+'건 저장'+(jj.replaced?('\n(기존 '+won(jj.replaced)+'건 교체)'):'');
+      if(failed.length){ msg+=' · ⚠️실패 '+failed.length+'개'; alertMsg+='\n\n⚠️ 실패 '+failed.length+'개: '+failed.map(f=>f.name+'('+f.error+')').join(', '); }
+      _cFiles=[];
+      await loadCamp(gStart,gEnd); // 표 갱신(이때 #cStat 새로 생성) → 메시지는 그 뒤에 설정해야 안 지워짐
+      const st2=$('#cStat'); if(st2){ st2.textContent=msg; st2.style.color=failed.length?'#C2710C':'var(--ac)'; st2.style.fontWeight='700'; }
+      alert(alertMsg);
     }catch(err){ if(st){ st.textContent='실패: '+err.message; st.style.color='#c2362f'; } cSave.style.pointerEvents='auto'; }
   });
   const cClear=$('#cClear'); if(cClear) cClear.addEventListener('click',async()=>{
