@@ -15,10 +15,16 @@ module.exports = {
   bucketOf,
   enabled: () => missingEnv().length === 0,
   async getSummary(date) {
+    // 분해 리포트 빌드가 길어지면 요약 전체가 지연/실패(총구매매출 미표시) → 12초에서 포기.
+    // 포기해도 백그라운드 빌드는 캐시되어 다음 조회 땐 즉시 반영됨(네이버 상세/재조회).
+    const breakdown = Promise.race([
+      getConversionBreakdown(date).catch(() => null),
+      new Promise((r) => setTimeout(() => r(null), 12000)),
+    ]);
     const [stats, biz, conv] = await Promise.all([
       getCampaignStats(date),
       getBizmoney().catch(() => null),
-      getConversionBreakdown(date).catch(() => null), // 구매/장바구니 분해 (당일은 미제공 → null)
+      breakdown,
     ]);
     const byCamp = (conv && conv.byCampaign) || {};
 

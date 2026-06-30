@@ -9,6 +9,7 @@ const { analyze, enabled } = require('./analyze');
 const naver = require('./naver-api');
 const metaApi = require('./meta-api');
 const cafe24 = require('./cafe24-analytics');
+const campaigns = require('./campaigns');
 const { kvGet, kvSet } = require('./store');
 
 const KEY = 'ai-daily';
@@ -30,11 +31,12 @@ function costOf(usage) {
 // 기간 전체 광고 데이터 수집 (실패 소스는 건너뜀)
 async function gather(start, end) {
   const s = ymd(start), e = ymd(end);
-  const [nv, meta, utm, kw] = await Promise.all([
+  const [nv, meta, utm, kw, gfa] = await Promise.all([
     naver.getNaverBucketRange(s, e).catch(() => null),
     metaApi.enabled() ? metaApi.getMetaBreakdown(s, e).catch(() => null) : Promise.resolve(null),
     cafe24.enabled() ? cafe24.getUtmSales(s, e).catch(() => null) : Promise.resolve(null),
     naver.getPowerlinkKeywordsRange(s, e).catch(() => null),
+    campaigns.query(s, e).catch(() => null), // GFA(업로드·메타형 성과형 디스플레이) — 기간 합산
   ]);
   const biz = await naver.getBizmoney().catch(() => null);
 
@@ -51,12 +53,18 @@ async function gather(start, end) {
   const kwTop = kw ? kw.rows.slice(0, 15).map((k) => ({ 키워드: k.keyword, 광고비: k.salesAmt, 클릭: k.clkCnt, 전환수: k.ccnt, 네이버전환매출: k.convAmt, ROAS_퍼센트: Math.round(k.ror) })) : [];
   const metaCamps = meta ? meta.accounts.flatMap((a) => (a.campaigns || []).filter((c) => c.spend > 0).map((c) => ({ 계정: a.platform, 캠페인: c.name, 광고비: c.spend, 구매: c.purch, 구매매출: c.purchVal, ROAS_퍼센트: c.roas }))) : [];
   const cafeTop = utm ? utm.byCampaign.slice(0, 12).map((c) => ({ 매체: c.medium, 캠페인: c.campaign, 주문: c.orders, 실매출: c.revenue })) : [];
+  // GFA(업로드 데이터) — API 미연동 대체. 구매/장바구니 분리.
+  const gt = (gfa && gfa.totals) || null;
+  const gfaSummary = gt ? { 광고비: gt.spend, 구매전환수: gt.purch, 구매전환매출: gt.purchVal, 장바구니수: gt.cart, 장바구니전환매출: gt.cartVal, 구매ROAS_퍼센트: gt.spend ? Math.round(gt.purchVal / gt.spend * 100) : null } : null;
+  const gfaCamps = (gfa && gfa.rows) ? gfa.rows.filter((r) => r.spend > 0).slice(0, 15).map((r) => ({ 캠페인: r.campaign, 광고비: r.spend, 구매: r.purch, 구매매출: r.purchVal, 장바구니: r.cart, 장바구니매출: r.cartVal, 구매ROAS_퍼센트: r.purchRoas })) : [];
 
   return {
     기간: s + ' ~ ' + e,
     매체별_광고비_실매출_진짜ROAS: unified,
     네이버_파워링크_키워드_top: kwTop,
     메타_캠페인: metaCamps,
+    GFA_요약_업로드데이터: gfaSummary,
+    GFA_캠페인_top: gfaCamps,
     Cafe24_유입_캠페인_top: cafeTop,
     Cafe24_요약: utm ? { 전체주문: utm.totalOrders, 전체매출: utm.totalRevenue, UTM태그매출: utm.taggedRevenue } : null,
     현재_네이버_비즈머니잔액: biz ? biz.bizmoney : null,
