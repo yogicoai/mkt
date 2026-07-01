@@ -470,7 +470,8 @@ async function loadKakao(){
   const el=$('#kakao'); if(!el) return;
   el.innerHTML='<div class="panel"><div class="state" style="padding:30px"><div class="spin"></div>카카오모먼트 불러오는 중…</div></div>';
   try{
-    const j=await (await fetch('/api/kakao?date='+(gEnd||ymd(new Date())).replace(/-/g,''))).json();
+    const _ks=(gStart||gEnd||ymd(new Date())).replace(/-/g,''), _ke=(gEnd||gStart||ymd(new Date())).replace(/-/g,'');
+    const j=await (await fetch('/api/kakao?start='+_ks+'&end='+_ke)).json();
     if(!j.ok){ el.innerHTML='<div class="panel"><h2>카카오모먼트</h2><div class="err" style="margin:6px 0">'+(j.error||'실패')+'</div></div>'; return; }
     if(!j.connected){
       el.innerHTML='<div class="panel"><h2>카카오모먼트 — 연결 필요</h2>'
@@ -481,7 +482,9 @@ async function loadKakao(){
     const r=(j.rows&&j.rows[0])||{};
     const roas=r.spend?Math.round((r.convValue||0)/r.spend*100):0;
     const cls=v=>v>=300?'hi':(v>=100?'mid':(v>0?'lo':'na'));
-    el.innerHTML='<div class="panel"><h2>카카오모먼트 ('+j.date+')</h2>'
+    const _dl=s=>String(s).replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
+    const _hdr=(j.start&&j.end&&j.start!==j.end)? (_dl(j.start)+' ~ '+_dl(j.end)+' 합산') : _dl(j.start||j.date);
+    el.innerHTML='<div class="panel"><h2>카카오모먼트 ('+_hdr+')</h2>'
       +'<div class="glossary" style="margin:0 0 10px">💡 카카오모먼트 보고서 API · 전환/전환매출은 1일 기여(conv_purchase_1d) 기준. 당일은 집계 전일 수 있어요.</div>'
       +'<table><thead><tr><th style="text-align:left">광고계정</th><th>광고비</th><th>노출</th><th>클릭</th><th>전환</th><th>전환매출</th><th>ROAS</th></tr></thead><tbody>'
       +'<tr><td style="text-align:left">카카오모먼트</td><td>'+won(r.spend)+'</td><td>'+won(r.imp)+'</td><td>'+won(r.clk)+'</td><td>'+won(r.conversions)+'</td><td>'+won(r.convValue)+'</td><td><span class="roas '+cls(roas)+'">'+won(roas)+'%</span></td></tr>'

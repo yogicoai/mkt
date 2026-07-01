@@ -230,12 +230,14 @@ export async function GET(req) {
       const cache = globalThis.__bestCache || (globalThis.__bestCache = new Map());
       const hit = cache.get(key);
       if (hit && Date.now() - hit.at < 90 * 1000) return J({ ok: true, cached: true, ...hit.data });
+      // 네이버 쇼핑 드릴다운이 느려도(서버리스 60초 제한) META는 항상 반환되게 시간예산 부여
+      const budget = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
       const [meta, nv] = await Promise.all([
         metaApi.enabled() ? metaApi.getMetaBestAds(start, end, limit).catch(() => []) : Promise.resolve([]),
-        naver.getBestProducts(start, end, limit).catch(() => []),
+        budget(naver.getBestProducts(start, end, limit).catch(() => []), 35000).then((r) => r || []),
       ]);
       const data = { start, end, meta, naver: nv };
-      cache.set(key, { at: Date.now(), data });
+      if (meta.length || nv.length) cache.set(key, { at: Date.now(), data }); // 둘 다 빈 결과(일시 실패)는 캐시하지 않음
       return J({ ok: true, ...data });
     }
 
@@ -331,10 +333,11 @@ export async function GET(req) {
       if (!kakao.enabled()) return J({ ok: false, error: '카카오 미설정 (KAKAO_REST_API_KEY / KAKAO_AD_ACCOUNT_ID)' }, 400);
       const connected = await kakao.hasToken();
       if (!connected) return J({ ok: true, connected: false, authUrl: '/api/kakao/authorize' });
-      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
-      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
-      const rows = await kakao.getSummary(date);
-      return J({ ok: true, connected: true, date, rows });
+      const start = (sp.get('start') || sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const end = (sp.get('end') || sp.get('date') || start).replace(/-/g, '');
+      if (!/^\d{8}$/.test(start) || !/^\d{8}$/.test(end)) return J({ ok: false, error: 'start/end는 YYYYMMDD 형식' }, 400);
+      const rows = await kakao.getSummary(start, end); // 기간이면 일별 합산
+      return J({ ok: true, connected: true, start, end, date: start, rows });
     }
 
     return J({ ok: false, error: 'not found: ' + p }, 404);
