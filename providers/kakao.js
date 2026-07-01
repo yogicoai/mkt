@@ -20,6 +20,19 @@ const API = 'https://apis.moment.kakao.com/openapi/v4';
 const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const _sumCache = new Map(); const SUM_TTL = 5 * 60 * 1000; // 보고서 5분 캐시(호출제한 5초/1회 회피)
 
+// 실제 사용할 광고계정 ID. .env가 틀린 계정이면(403 -402/-813) 토큰이 권한 가진 계정으로 자동 교체.
+let _acct = ADACCT;
+// 이 토큰이 접근 가능한 광고계정 목록에서 첫 계정 발견(자가치유). GET /adAccounts.
+async function discoverAccount(tok) {
+  try {
+    const r = await fetch(`${API}/adAccounts`, { headers: { Authorization: `Bearer ${tok.access_token}` } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const id = j && Array.isArray(j.content) && j.content[0] && j.content[0].id;
+    return id ? String(id) : null;
+  } catch (_) { return null; }
+}
+
 function enabled() { return !!REST_KEY && !!ADACCT; }
 
 function authorizeUrl(redirectUri) {
@@ -65,12 +78,17 @@ async function report(start, end, opts) {
   if (!tok || !tok.access_token) throw new Error('카카오 비즈니스 토큰 없음 — 대시보드 카카오 탭에서 "연결하기"로 1회 동의가 필요합니다.');
   const sd = dash(start).replace(/-/g, ''), ed = dash(end || start).replace(/-/g, ''); // yyyyMMdd (기간이면 일별 반환 → 합산)
   const u = new URL(`${API}/adAccounts/report`);
-  u.searchParams.set('adAccountId', String(ADACCT));
+  u.searchParams.set('adAccountId', String(_acct));
   u.searchParams.set('start', sd); u.searchParams.set('end', ed);
   u.searchParams.set('metricsGroup', 'BASIC,MESSAGE,PIXEL_SDK_CONVERSION'); // MESSAGE 포함 — 메시지 캠페인 발송/클릭
-  const r = await fetch(u, { headers: { Authorization: `Bearer ${tok.access_token}`, adAccountId: String(ADACCT) } });
+  const r = await fetch(u, { headers: { Authorization: `Bearer ${tok.access_token}`, adAccountId: String(_acct) } });
   if (r.status === 401 && !opts.refreshed) { const n = await refresh(tok); if (n) return report(start, end, { ...opts, refreshed: true }); }
   if (r.status === 429 && !opts.rateRetried) { await _sleep(5500); return report(start, end, { ...opts, rateRetried: true }); } // 호출제한 5초/1회
+  // 403(-402 미동의 / -813 권한없음): 설정된 계정이 틀렸을 수 있음 → 접근 가능한 계정으로 1회 자동 교체 후 재시도
+  if (r.status === 403 && !opts.acctRetried) {
+    const found = await discoverAccount(tok);
+    if (found && found !== String(_acct)) { _acct = found; return report(start, end, { ...opts, acctRetried: true }); }
+  }
   const txt = await r.text();
   let j; try { j = JSON.parse(txt); } catch (_) { throw new Error(`카카오모먼트 응답 파싱 실패 (HTTP ${r.status}): ${txt.slice(0, 140)}`); }
   if (!r.ok) {
@@ -89,7 +107,7 @@ async function balance() {
   const tok = await getStoredToken();
   if (!tok || !tok.access_token) return null;
   try {
-    const r = await fetch(`${API}/adAccounts/balance`, { headers: { Authorization: `Bearer ${tok.access_token}`, adAccountId: String(ADACCT) } });
+    const r = await fetch(`${API}/adAccounts/balance`, { headers: { Authorization: `Bearer ${tok.access_token}`, adAccountId: String(_acct) } });
     if (!r.ok) return null;
     const j = await r.json();
     const val = (+j.cash || 0) + (+j.freeCash || 0); // 유상+무상 캐시 합 = 보유 잔액(원)
@@ -112,15 +130,16 @@ module.exports = {
       if (hit) return hit.data;                  // 429 등 일시 오류는 조용히 — 캐시 있으면 그걸
       return [{ platform: '카카오모먼트', spend: 0, conversions: 0, convValue: 0, buyCnt: 0, buyVal: 0, cartCnt: 0, cartVal: 0, imp: 0, clk: 0, balance: bal, currency: 'KRW', note: '집계 대기' }]; // 0행이어도 잔액은 표시
     }
-    let spend = 0, imp = 0, click = 0, conv = 0, rev = 0;
+    let spend = 0, imp = 0, click = 0, conv = 0, rev = 0, cart = 0;
     for (const row of (j.data || [])) {
       const m = row.metrics || row || {};
       spend += +m.cost || 0;
       imp += (+m.imp || 0) + (+m.msg_send || 0);    // 메시지 캠페인은 노출 대신 발송수
       click += (+m.click || 0) + (+m.msg_click || 0); // 메시지 클릭 포함
       conv += +m.conv_purchase_1d || 0; rev += +m.conv_purchase_p_1d || 0;
+      cart += +m.conv_add_to_cart_1d || 0;          // 장바구니 담기(1일) — 카카오는 담기 매출값은 미제공
     }
-    const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), buyCnt: Math.round(conv), buyVal: Math.round(rev), cartCnt: 0, cartVal: 0, imp, clk: click, balance: bal, currency: 'KRW' }];
+    const rows = [{ platform: '카카오모먼트', spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev), buyCnt: Math.round(conv), buyVal: Math.round(rev), cartCnt: Math.round(cart), cartVal: 0, imp, clk: click, balance: bal, currency: 'KRW' }];
     _sumCache.set(key, { at: Date.now(), data: rows });
     return rows;
   },
