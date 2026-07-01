@@ -2,7 +2,7 @@
 
 // 네이버 검색광고 어댑터 — 리포트와 동일하게 키워드/쇼핑/브랜드 3매체로 분리
 // (전환·전환매출은 리포트 기준과 동일한 '총전환' = Stat API ccnt/convAmt)
-const { getCampaignStats, getBizmoney, missingEnv, getConversionBreakdown } = require('../naver-api');
+const { getCampaignStats, getBizmoney, missingEnv, getConversionBreakdown, getConversionBreakdownRange } = require('../naver-api');
 
 // 캠페인유형(campaignTp) → 표시 매체명
 const BUCKET = { WEB_SITE: '네이버 키워드', SHOPPING: '네이버 쇼핑', BRAND_SEARCH: '네이버 브랜드' };
@@ -14,15 +14,17 @@ module.exports = {
   label: '네이버 검색광고',
   bucketOf,
   enabled: () => missingEnv().length === 0,
-  async getSummary(date) {
-    // 분해 리포트 빌드가 길어지면 요약 전체가 지연/실패(총구매매출 미표시) → 12초에서 포기.
-    // 포기해도 백그라운드 빌드는 캐시되어 다음 조회 땐 즉시 반영됨(네이버 상세/재조회).
+  async getSummary(start, end) {
+    const s = start, e = end || start;
+    const single = String(s).replace(/-/g, '') === String(e).replace(/-/g, '');
+    // 분해 리포트 빌드가 길어지면 요약 전체가 지연/실패(총구매매출 미표시) → 타임아웃에서 포기.
+    // 포기해도 백그라운드 빌드는 캐시되어 다음 조회 땐 즉시 반영됨.
     const breakdown = Promise.race([
-      getConversionBreakdown(date).catch(() => null),
-      new Promise((r) => setTimeout(() => r(null), 12000)),
+      (single ? getConversionBreakdown(s) : getConversionBreakdownRange(s, e)).catch(() => null),
+      new Promise((r) => setTimeout(() => r(null), single ? 12000 : 30000)),
     ]);
     const [stats, biz, conv] = await Promise.all([
-      getCampaignStats(date),
+      getCampaignStats(s, e),
       getBizmoney().catch(() => null),
       breakdown,
     ]);

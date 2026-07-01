@@ -113,16 +113,16 @@ module.exports = {
   label: '크리테오',
   enabled,
   getBreakdown,
-  async getSummary(date) {
+  async getSummary(start, end) {
     const tok = await token();
     const advIds = await advertiserIds(tok);
-    const d = dash(date);
+    const sd = dash(start), ed = dash(end || start); // 기간이면 일별 반환 → 아래서 합산
     const body = {
       advertiserIds: advIds,
       currency: 'KRW',
       dimensions: ['Day'],
       metrics: ['AdvertiserCost', 'SalesPc30dPv24h', 'RevenueGeneratedPc30dPv24h'],
-      startDate: d, endDate: d, format: 'json', timezone: 'Asia/Seoul',
+      startDate: sd, endDate: ed, format: 'json', timezone: 'Asia/Seoul',
     };
     const res = await fetch(`https://api.criteo.com/${V}/statistics/report`, {
       method: 'POST',

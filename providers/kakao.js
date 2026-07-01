@@ -59,18 +59,18 @@ async function refresh(tok) {
 }
 
 // 보고서 호출 (401 → refresh 재시도, 429 → 호출제한 대기 후 재시도)
-async function report(date, opts) {
+async function report(start, end, opts) {
   opts = opts || {};
   const tok = await getStoredToken();
   if (!tok || !tok.access_token) throw new Error('카카오 비즈니스 토큰 없음 — 대시보드 카카오 탭에서 "연결하기"로 1회 동의가 필요합니다.');
-  const d = dash(date).replace(/-/g, ''); // yyyyMMdd
+  const sd = dash(start).replace(/-/g, ''), ed = dash(end || start).replace(/-/g, ''); // yyyyMMdd (기간이면 일별 반환 → 합산)
   const u = new URL(`${API}/adAccounts/report`);
   u.searchParams.set('adAccountId', String(ADACCT));
-  u.searchParams.set('start', d); u.searchParams.set('end', d);
+  u.searchParams.set('start', sd); u.searchParams.set('end', ed);
   u.searchParams.set('metricsGroup', 'BASIC,MESSAGE,PIXEL_SDK_CONVERSION'); // MESSAGE 포함 — 메시지 캠페인 발송/클릭
   const r = await fetch(u, { headers: { Authorization: `Bearer ${tok.access_token}`, adAccountId: String(ADACCT) } });
-  if (r.status === 401 && !opts.refreshed) { const n = await refresh(tok); if (n) return report(date, { ...opts, refreshed: true }); }
-  if (r.status === 429 && !opts.rateRetried) { await _sleep(5500); return report(date, { ...opts, rateRetried: true }); } // 호출제한 5초/1회
+  if (r.status === 401 && !opts.refreshed) { const n = await refresh(tok); if (n) return report(start, end, { ...opts, refreshed: true }); }
+  if (r.status === 429 && !opts.rateRetried) { await _sleep(5500); return report(start, end, { ...opts, rateRetried: true }); } // 호출제한 5초/1회
   const txt = await r.text();
   let j; try { j = JSON.parse(txt); } catch (_) { throw new Error(`카카오모먼트 응답 파싱 실패 (HTTP ${r.status}): ${txt.slice(0, 140)}`); }
   if (!r.ok) {
@@ -100,13 +100,13 @@ async function balance() {
 
 module.exports = {
   id: 'kakao', label: '카카오모먼트', enabled, authorizeUrl, exchangeCode, hasToken,
-  async getSummary(date) {
-    const key = String(date);
+  async getSummary(start, end) {
+    const key = String(start) + '_' + String(end || start);
     const hit = _sumCache.get(key);
     if (hit && Date.now() - hit.at < SUM_TTL) return hit.data;
     const bal = await balance(); // 잔액은 날짜 무관 — 데이터 0/오류여도 항상 표시
     let j;
-    try { j = await report(date); }
+    try { j = await report(start, end); }
     catch (e) {
       if (e && e.code === 401) throw e;          // 토큰 만료/무효는 노출(재연결 필요)
       if (hit) return hit.data;                  // 429 등 일시 오류는 조용히 — 캐시 있으면 그걸

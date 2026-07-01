@@ -48,9 +48,9 @@ function pickAny(arr, types) {
   return 0;
 }
 
-async function one(acc, date) {
-  const since = dash(date);
-  const tr = encodeURIComponent(JSON.stringify({ since, until: since }));
+async function one(acc, start, end) {
+  const since = dash(start), until = dash(end || start); // time_increment 없으면 기간 전체 합산 1행
+  const tr = encodeURIComponent(JSON.stringify({ since, until }));
   const ins = await mget(`act_${stripAct(acc.id)}/insights?level=account&time_range=${tr}&fields=spend,impressions,clicks,actions,action_values`);
   const row = (ins.data && ins.data[0]) || {};
   const spend = Math.round(+row.spend || 0); // insights spend = 통화 실제단위
@@ -76,7 +76,7 @@ module.exports = {
   id: 'meta',
   label: 'META',
   enabled,
-  async getSummary(date) {
-    return Promise.all(ACCOUNTS.map((a) => one(a, date)));
+  async getSummary(start, end) {
+    return Promise.all(ACCOUNTS.map((a) => one(a, start, end)));
   },
 };

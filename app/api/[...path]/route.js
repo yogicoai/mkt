@@ -26,12 +26,14 @@ export async function GET(req) {
   const p = url.pathname;
   const sp = url.searchParams;
   try {
-    // ── 전 플랫폼 통합 요약 ──
+    // ── 전 플랫폼 통합 요약 (start=end면 하루, 다르면 기간 합산) ──
     if (p === '/api/summary') {
-      const date = (sp.get('date') || naver.yesterday()).replace(/-/g, '');
-      if (!/^\d{8}$/.test(date)) return J({ ok: false, error: 'date는 YYYYMMDD 형식' }, 400);
-      const data = await providers.getAllSummaries(date);
-      if (store.configured()) { try { await store.saveDaily(date, data.rows); } catch (_) {} } // 추이 자동 적재(daily_stats)
+      const start = (sp.get('start') || sp.get('date') || naver.yesterday()).replace(/-/g, '');
+      const end = (sp.get('end') || sp.get('date') || start).replace(/-/g, '');
+      if (!/^\d{8}$/.test(start) || !/^\d{8}$/.test(end)) return J({ ok: false, error: 'start/end는 YYYYMMDD 형식' }, 400);
+      const data = await providers.getAllSummaries(start, end);
+      // 추이 자동 적재(daily_stats)는 '하루' 조회일 때만 (기간 합산을 하루로 저장하면 오염되므로)
+      if (start === end && store.configured()) { try { await store.saveDaily(start, data.rows); } catch (_) {} }
       return J({ ok: true, ...data });
     }
 

@@ -128,7 +128,7 @@
       <div style="font-weight:800;font-size:17px;margin-bottom:8px">📖 사용설명서</div>
       <div style="font-size:12.5px;line-height:1.7;color:var(--tx2)">
       <div style="font-weight:700;color:var(--tx);margin:10px 0 3px">① 기간 고르기 (맨 위 버튼)</div>
-      <b>오늘·어제</b>는 그 하루, <b>최근7일·이번달·지난달</b>은 그 기간, <b>기간 설정</b>은 직접 날짜 범위를 정해요. 고르면 <b>모든 탭</b>이 그 기간으로 바뀝니다. <span style="color:var(--tx3)">(전체·네이버 탭은 '하루' 기준이라, 여러 날을 고르면 마지막 날만 표시돼요.)</span>
+      <b>오늘·어제</b>는 그 하루, <b>최근7일·이번달·지난달</b>은 그 기간, <b>기간 설정</b>은 직접 날짜 범위를 정해요. 고르면 <b>모든 탭</b>이 그 기간으로 바뀝니다. <span style="color:var(--tx3)">(전체·네이버 탭도 선택 기간 합산으로 표시돼요.)</span>
 
       <div style="background:#EEF6FF;border:1px solid #D6E6FF;border-radius:10px;padding:10px 13px;margin:10px 0 2px">
         <div style="font-weight:700;color:var(--tx)">📅 과거 데이터, 언제까지 볼 수 있나요?</div>
@@ -309,7 +309,7 @@ function setPeriod(start,end,opts){
   gStart=start; gEnd=end;
   if(dateEl) dateEl.value=end;                 // 단일일자 탭(전체·네이버·드릴다운) 동기화
   const ps=$('#pStart'), pe=$('#pEnd'); if(ps) ps.value=start; if(pe) pe.value=end;
-  document.querySelectorAll('#periodBtns button').forEach(b=>{ const r=presetRange(b.dataset.p); b.classList.toggle('on', r[0]===start&&r[1]===end); });
+  let _pmatched=false; document.querySelectorAll('#periodBtns button').forEach(b=>{ const r=presetRange(b.dataset.p); const hit=!_pmatched&&r[0]===start&&r[1]===end; if(hit)_pmatched=true; b.classList.toggle('on', hit); }); // 같은 범위 프리셋 여러개(예: 1일엔 오늘=이번달)여도 첫 것만 활성
   if(!(opts&&opts.silent)) reloadActive();
 }
 
@@ -883,12 +883,13 @@ async function load(){
   $('#platforms').innerHTML='<div class="state" style="padding:24px"><div class="spin"></div>전 플랫폼 조회 중…</div>';
   content.innerHTML='<div class="state"><div class="spin"></div>네이버 API 조회 중…</div>';
   try{
-    const prevDate = shiftYmd(date, -7); // 7일 전(같은 요일) 대비
+    const single = startYmd === date; // 하루 조회면 7일전 대비, 기간 조회면 비교 생략(로딩 단축)
+    const prevDate = single ? shiftYmd(date, -7) : null;
     const [sum, j, prev, gfaResp] = await Promise.all([
-      fetch('/api/summary?date='+date).then(r=>r.json()).catch(e=>({ok:false,error:String(e)})),
+      fetch('/api/summary?start='+startYmd+'&end='+date).then(r=>r.json()).catch(e=>({ok:false,error:String(e)})),
       fetch('/api/stats?start='+startYmd+'&end='+date).then(r=>r.json()),
-      fetch('/api/summary?date='+prevDate).then(r=>r.json()).catch(()=>null),
-      fetch('/api/campaigns?start='+date+'&end='+date).then(r=>r.json()).catch(()=>null), // GFA(업로드) — 선택일(그날) 데이터
+      single ? fetch('/api/summary?date='+prevDate).then(r=>r.json()).catch(()=>null) : Promise.resolve(null),
+      fetch('/api/campaigns?start='+startYmd+'&end='+date).then(r=>r.json()).catch(()=>null), // GFA(업로드) — 선택 기간 합산
     ]);
     const gfaTot = (gfaResp && gfaResp.ok && gfaResp.totals) ? gfaResp.totals : null;
     lastSum = (sum && sum.ok) ? sum : null;
@@ -902,7 +903,7 @@ async function load(){
     const _dl=s=>s.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
     $('#acct').textContent = '광고계정 '+j.customerId+' · '+(startYmd!==date? (_dl(startYmd)+' ~ '+_dl(date)) : _dl(date));
     render(j);
-    if(gStart!==gEnd){ const note='<div class="glossary" style="margin:0 0 10px;background:#FFF7E6;border-color:#FFE0A3">📅 <b>전체·네이버</b> 탭은 하루 단위라 선택 기간의 <b>마지막 날('+gEnd+')</b> 기준이에요. 기간 비교는 META·유입·GFA 탭에서 보세요.</div>'; content.insertAdjacentHTML('afterbegin',note); const pf=$('#platforms'); if(pf) pf.insertAdjacentHTML('afterbegin',note); }
+    if(gStart!==gEnd){ const note='<div class="glossary" style="margin:0 0 10px;background:#EEF4FF;border-color:#D6E4FF">📅 <b>선택 기간('+gStart+' ~ '+gEnd+') 합산</b>이에요. <span style="color:var(--tx3)">네이버 구매·장바구니 분해는 최근 62일까지만 반영돼요(광고비·총전환은 전체 기간 정상).</span></div>'; content.insertAdjacentHTML('afterbegin',note); const pf=$('#platforms'); if(pf) pf.insertAdjacentHTML('afterbegin',note); }
     $('#updated').textContent = '갱신 '+new Date().toLocaleTimeString('ko-KR');
   }catch(e){
     content.innerHTML = '<div class="err">조회 실패: '+e.message+'</div>';
@@ -963,14 +964,14 @@ function renderPlatforms(d, prev, gfa){
   const errs=(d.errors||[]).length? `<div style="font-size:12px;color:#c2362f;margin-top:6px">⚠ 오류: ${d.errors.map(e=>e.platform+' ('+e.error+')').join(' / ')}</div>`:'';
   // GFA(업로드) — 선택 기간 합산. 매체 합계(선택일)와 단위가 다를 수 있어 별도 줄로 표시
   const gR=gfa&&((gfa.spend||0)>0||(gfa.purchVal||0)>0||(gfa.cartVal||0)>0), gRoas=gR?roas(gfa.spend,gfa.purchVal):0;
-  const gfaRow=gR? `<tr style="border-top:1px dashed var(--bd);background:var(--sf2)"><td><b>GFA</b> <span style="font-size:11px;color:#9aa3ad">📁 업로드(선택일)</span></td><td>${won(gfa.spend)}</td><td>${won(gfa.purch)}</td><td>${won(gfa.purchVal)}</td><td style="color:var(--tx3)">${won(gfa.cart)}</td><td style="color:var(--tx3)">${won(gfa.cartVal)}</td><td><span class="roas ${effTier(gfa.spend,gRoas).cls}">${won(gRoas)}%</span></td><td>${bal(null)}</td></tr>`:'';
+  const gfaRow=gR? `<tr style="border-top:1px dashed var(--bd);background:var(--sf2)"><td><b>GFA</b> <span style="font-size:11px;color:#9aa3ad">📁 업로드(기간)</span></td><td>${won(gfa.spend)}</td><td>${won(gfa.purch)}</td><td>${won(gfa.purchVal)}</td><td style="color:var(--tx3)">${won(gfa.cart)}</td><td style="color:var(--tx3)">${won(gfa.cartVal)}</td><td><span class="roas ${effTier(gfa.spend,gRoas).cls}">${won(gRoas)}%</span></td><td>${bal(null)}</td></tr>`:'';
   $('#platforms').innerHTML=kpis+diag+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 구매 · 장바구니 분리</h2>
     <table><thead><tr><th>플랫폼</th><th>광고비</th><th>구매전환수</th><th>구매전환매출</th><th>🛒장바구니수</th><th>🛒장바구니매출</th><th>구매ROAS</th><th>잔액</th></tr></thead>
     <tbody>${rows.map(tr).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
     ${gfaRow}
-    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계 <span style="font-size:10px;color:var(--tx3);font-weight:500">(선택일·GFA 제외)</span></td><td>${won(sum.spend)}</td><td>${won(sum.buyCnt)}</td><td>${won(sum.buyVal)}</td><td style="color:var(--tx3)">${won(sum.cartCnt)}</td><td style="color:var(--tx3)">${won(sum.cartVal)}</td><td>${won(roas(sum.spend,sum.buyVal))}%</td><td>${won(sum.bal)}</td></tr>
+    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계 <span style="font-size:10px;color:var(--tx3);font-weight:500">(기간합계·GFA 제외)</span></td><td>${won(sum.spend)}</td><td>${won(sum.buyCnt)}</td><td>${won(sum.buyVal)}</td><td style="color:var(--tx3)">${won(sum.cartCnt)}</td><td style="color:var(--tx3)">${won(sum.cartVal)}</td><td>${won(roas(sum.spend,sum.buyVal))}%</td><td>${won(sum.bal)}</td></tr>
     </tbody></table>
-    <div class="glossary" style="margin:8px 0 0">💡 <b>구매전환</b>=실결제(purchase) · <b>🛒장바구니</b>=담기(add_to_cart, 실매출 아님·참고) · <b>구매ROAS</b>=구매매출÷광고비. 매체별 효율 신호는 위 <b>⚡자동 진단</b> 참고. <b>네이버</b>는 당일 구매·장바구니 분해가 미제공이라 0으로 보일 수 있어요(어제 기준은 정상). <b>크리테오·카카오</b>는 장바구니 지표 미제공.${gR?' <b>GFA</b>는 업로드 데이터라 <b>선택일(그날)</b> 기준으로 표시(매체 합계와는 별도).':''}</div>
+    <div class="glossary" style="margin:8px 0 0">💡 <b>구매전환</b>=실결제(purchase) · <b>🛒장바구니</b>=담기(add_to_cart, 실매출 아님·참고) · <b>구매ROAS</b>=구매매출÷광고비. 매체별 효율 신호는 위 <b>⚡자동 진단</b> 참고. <b>네이버</b>는 당일 구매·장바구니 분해가 미제공이라 0으로 보일 수 있어요(어제 기준은 정상). <b>크리테오·카카오</b>는 장바구니 지표 미제공.${gR?' <b>GFA</b>는 업로드 데이터라 <b>선택 기간 합산</b>으로 표시(매체 합계와는 별도).':''}</div>
     ${disabled}${errs}</div>`;
 }
 

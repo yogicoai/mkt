@@ -9,10 +9,10 @@ const kakao = require('./kakao');
 
 const ALL = [naver, meta, criteo, gfa, kakao];
 
-async function getAllSummaries(date) {
+async function getAllSummaries(start, end) {
   const on = ALL.filter((p) => p.enabled());
   const off = ALL.filter((p) => !p.enabled()).map((p) => p.label);
-  const settled = await Promise.allSettled(on.map((p) => p.getSummary(date)));
+  const settled = await Promise.allSettled(on.map((p) => p.getSummary(start, end)));
 
   const rows = [], errors = [];
   settled.forEach((r, i) => {
@@ -20,7 +20,7 @@ async function getAllSummaries(date) {
     else errors.push({ platform: on[i].label, error: r.reason.message });
   });
 
-  return { date, rows, errors, disabled: off };
+  return { date: start, start, end: end || start, rows, errors, disabled: off };
 }
 
 module.exports = { getAllSummaries, providers: ALL };
