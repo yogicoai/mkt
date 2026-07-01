@@ -100,15 +100,19 @@ async function getCampaigns() {
  * 특정 일자(YYYYMMDD)의 캠페인별 효율을 조회.
  * @returns { date, rows: [...], totals: {...} }
  */
-// 동시 호출 dedup: 같은 날짜 요청이 진행 중이면 같은 Promise 공유 (통합표+상세 중복 방지)
+// 동시 호출 dedup + 90초 결과 캐시 (통합표+상세 재접근 시 캠페인별 재호출 방지)
 const _statsInflight = new Map();
+const _statsCache = new Map();
+const STATS_TTL = 90 * 1000;
 async function getCampaignStats(startStr, endStr) {
   const s = String(startStr).replace(/-/g, ''), e = String(endStr || startStr).replace(/-/g, '');
   const key = s + '_' + e;
+  const hit = _statsCache.get(key);
+  if (hit && Date.now() - hit.at < STATS_TTL) return hit.data;
   if (_statsInflight.has(key)) return _statsInflight.get(key);
   const p = (s === e) ? _computeCampaignStats(startStr) : _computeCampaignStatsRange(startStr, endStr);
   _statsInflight.set(key, p);
-  try { return await p; } finally { _statsInflight.delete(key); }
+  try { const d = await p; _statsCache.set(key, { at: Date.now(), data: d }); return d; } finally { _statsInflight.delete(key); }
 }
 
 async function _computeCampaignStats(dateStr) {
