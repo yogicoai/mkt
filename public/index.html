@@ -993,6 +993,7 @@ async function loadBest(start, end){
 
 function renderBest(j){
   const el=$('#bestcreatives'); if(!el) return;
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const nv=j.naver||[], mt=j.meta||[];
   const metricBlock=(conv,rev,clk,imp,ro)=>`<div><b style="color:var(--green-d)">전환 ${won(conv)}</b> · 매출 ${won(rev)}</div><div style="color:var(--tx3)">클릭 ${won(clk)} · 노출 ${won(imp)} · ROAS ${won(ro)}%</div>`;
   const card=(rank,img,title,sub,metrics)=>{
