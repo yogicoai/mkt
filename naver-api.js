@@ -61,10 +61,19 @@ function authHeaders(method, uri) {
 async function api(method, uri, { query, body } = {}) {
   let url = BASE + uri;
   if (query) url += '?' + new URLSearchParams(query).toString();
-  const opt = { method, headers: authHeaders(method, uri) };
-  if (body) opt.body = JSON.stringify(body);
-  const res = await fetch(url, opt);
-  const text = await res.text();
+  const bodyStr = body ? JSON.stringify(body) : undefined;
+  let res, text;
+  for (let attempt = 0; ; attempt++) {
+    const opt = { method, headers: authHeaders(method, uri) }; // 재시도마다 서명 재생성(타임스탬프 갱신)
+    if (bodyStr) opt.body = bodyStr;
+    res = await fetch(url, opt);
+    text = await res.text();
+    if ((res.status === 429 || res.status === 503) && attempt < 3) { // rate-limit/일시장애 백오프 재시도
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1) * (attempt + 1)));
+      continue;
+    }
+    break;
+  }
   let data; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
     const e = new Error(`HTTP ${res.status} ${method} ${uri}`);
@@ -451,6 +460,29 @@ async function getProductStats(campaignId, startStr, endStr) {
   return { campaignId, date: startStr, start: startStr, end: endStr || startStr, productCount: adIds.length, activeCount: rows.length, truncated, rows };
 }
 
+// 전체 쇼핑 캠페인의 상품(소재)을 통합 → 베스트 N (전환수 우선). 전체 탭 '매체별 베스트 소재'용.
+async function getBestProducts(startStr, endStr, limit = 5) {
+  const camps = await getCampaigns();
+  const shopping = camps.filter((c) => c.campaignTp === 'SHOPPING' && !/샐리필|sally/i.test(c.name || ''));
+  const agg = {};
+  await mapLimit(shopping, 2, async (c) => { // 동시성 낮춰 rate-limit 완화(다른 조회와 겹칠 수 있음)
+    try {
+      const r = await getProductStats(c.nccCampaignId, startStr, endStr);
+      for (const p of (r.rows || [])) {
+        const key = String(p.url || '') + '|' + String(p.product || '');
+        const o = agg[key] || (agg[key] = { product: p.product, image: p.image, url: p.url, price: p.price, impCnt: 0, clkCnt: 0, salesAmt: 0, ccnt: 0, convAmt: 0 });
+        o.impCnt += p.impCnt || 0; o.clkCnt += p.clkCnt || 0; o.salesAmt += p.salesAmt || 0; o.ccnt += p.ccnt || 0; o.convAmt += p.convAmt || 0;
+        if (!o.image && p.image) o.image = p.image;
+      }
+    } catch (_) { /* 캠페인 실패 무시 */ }
+  });
+  return Object.values(agg)
+    .map((p) => ({ ...p, roas: p.salesAmt > 0 ? Math.round(p.convAmt / p.salesAmt * 100) : 0 }))
+    .filter((r) => r.impCnt > 0)
+    .sort((a, b) => (b.ccnt - a.ccnt) || (b.convAmt - a.convAmt) || (b.clkCnt - a.clkCnt))
+    .slice(0, limit);
+}
+
 // 단일 광고그룹의 상품(소재)별 효율 (쇼핑 계층 2단계)
 async function getProductStatsForAdgroup(adgroupId, startStr, endStr) {
   const since = dash(startStr), until = dash(endStr || startStr);
@@ -566,5 +598,5 @@ function yesterday() {
 
 module.exports = {
   BASE, CUSTOMER, FIELDS,
-  missingEnv, authHeaders, api, getCampaigns, getCampaignStats, getBizmoney, getCartConversions, getConversionBreakdown, getConversionBreakdownRange, getKeywordStats, getPowerlinkKeywordsRange, getNaverBucketRange, normKw, getProductStats, getProductStatsForAdgroup, getAdgroupStats, getKeywordStatsForAdgroup, yesterday, dash,
+  missingEnv, authHeaders, api, getCampaigns, getCampaignStats, getBizmoney, getCartConversions, getConversionBreakdown, getConversionBreakdownRange, getKeywordStats, getPowerlinkKeywordsRange, getNaverBucketRange, normKw, getProductStats, getBestProducts, getProductStatsForAdgroup, getAdgroupStats, getKeywordStatsForAdgroup, yesterday, dash,
 };

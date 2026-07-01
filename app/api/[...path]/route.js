@@ -220,6 +220,25 @@ export async function GET(req) {
       return J({ ok: true, ...data });
     }
 
+    // ── 매체별 베스트 소재 (네이버 쇼핑 상품 + META 광고, 전환수 기준 top5) ──
+    if (p === '/api/best-creatives') {
+      const now = new Date();
+      const end = sp.get('end') || toYmd(now);
+      const start = sp.get('start') || end;
+      const limit = Math.max(1, Math.min(10, +(sp.get('limit') || 5)));
+      const key = start + '_' + end + '_' + limit;
+      const cache = globalThis.__bestCache || (globalThis.__bestCache = new Map());
+      const hit = cache.get(key);
+      if (hit && Date.now() - hit.at < 90 * 1000) return J({ ok: true, cached: true, ...hit.data });
+      const [meta, nv] = await Promise.all([
+        metaApi.enabled() ? metaApi.getMetaBestAds(start, end, limit).catch(() => []) : Promise.resolve([]),
+        naver.getBestProducts(start, end, limit).catch(() => []),
+      ]);
+      const data = { start, end, meta, naver: nv };
+      cache.set(key, { at: Date.now(), data });
+      return J({ ok: true, ...data });
+    }
+
     // ── 파워링크 키워드 진짜 ROAS ──
     if (p === '/api/keyword-roas') {
       if (!cafe24.enabled()) return J({ ok: false, error: 'Cafe24 토큰 미설정' }, 400);

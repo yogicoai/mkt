@@ -237,6 +237,7 @@
       &nbsp;|&nbsp; 🔒 API 키·서명은 <b>서버에서만</b> 처리(브라우저 비노출)
     </div>
     <div id="platforms"></div>
+    <div id="bestcreatives"></div>
     <div id="trend"></div>
   </div>
 
@@ -898,6 +899,7 @@ async function load(){
       renderPlatforms(sum, (prev&&prev.ok)?prev:null, gfaTot);
       // 실매출(Cafe24) 대조는 비동기로 — 통합표를 막지 않음
       fetch('/api/utm?start='+gEnd+'&end='+gEnd).then(r=>r.json()).then(u=>renderRealGap(sum,(u&&u.ok)?u.sales:null)).catch(()=>renderRealGap(sum,null));
+      loadBest(startYmd, date); // 매체별 베스트 소재 — 지연 로드(통합표/상세 다 뜬 뒤, 무막힘)
     } else $('#platforms').innerHTML='';
     if(!j.ok) throw new Error(j.error + (j.detail? ' · '+JSON.stringify(j.detail):''));
     const _dl=s=>s.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3');
@@ -973,6 +975,41 @@ function renderPlatforms(d, prev, gfa){
     </tbody></table>
     <div class="glossary" style="margin:8px 0 0">💡 <b>구매전환</b>=실결제(purchase) · <b>🛒장바구니</b>=담기(add_to_cart, 실매출 아님·참고) · <b>구매ROAS</b>=구매매출÷광고비. 매체별 효율 신호는 위 <b>⚡자동 진단</b> 참고. <b>네이버</b>는 당일 구매·장바구니 분해가 미제공이라 0으로 보일 수 있어요(어제 기준은 정상). <b>크리테오·카카오</b>는 장바구니 지표 미제공.${gR?' <b>GFA</b>는 업로드 데이터라 <b>선택 기간 합산</b>으로 표시(매체 합계와는 별도).':''}</div>
     ${disabled}${errs}</div>`;
+}
+
+// 🏆 매체별 베스트 소재 — 지연 로드(네이버 쇼핑 상품 + META 광고, 전환수 TOP5). 통합표를 막지 않음.
+async function loadBest(start, end){
+  const el=$('#bestcreatives'); if(!el) return;
+  el.innerHTML='<div class="panel" style="margin:0 0 14px"><h2>🏆 매체별 베스트 소재 <span style="font-size:11px;font-weight:500;color:var(--tx3)">· 전환수 기준 TOP 5</span></h2><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>베스트 소재 집계 중…</div></div>';
+  try{
+    const j=await fetch('/api/best-creatives?start='+start+'&end='+end+'&limit=5').then(r=>r.json());
+    if(!j || !j.ok){ el.innerHTML=''; return; }
+    renderBest(j);
+  }catch(e){ el.innerHTML=''; }
+}
+
+function renderBest(j){
+  const el=$('#bestcreatives'); if(!el) return;
+  const nv=j.naver||[], mt=j.meta||[];
+  if(!nv.length && !mt.length){ el.innerHTML=''; return; }
+  const metricBlock=(conv,rev,clk,imp,ro)=>`<div><b style="color:var(--green-d)">전환 ${won(conv)}</b> · 매출 ${won(rev)}</div><div style="color:var(--tx3)">클릭 ${won(clk)} · 노출 ${won(imp)} · ROAS ${won(ro)}%</div>`;
+  const card=(rank,img,title,sub,metrics)=>{
+    const thumb=img?'<img src="'+esc(img)+'" data-full="'+esc(img)+'" class="meta-thumb" loading="lazy" onerror="this.style.display=&#39;none&#39;" style="width:46px;height:46px;border-radius:8px;object-fit:cover;flex:none">':'<div style="width:46px;height:46px;border-radius:8px;background:var(--sf2);flex:none"></div>';
+    return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--bd)">
+      <div style="width:18px;text-align:center;font-weight:800;color:var(--tx3);flex:none">${rank}</div>${thumb}
+      <div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(title)}">${esc(title)}</div><div style="font-size:11px;color:var(--tx3);margin-top:2px">${sub}</div></div>
+      <div style="text-align:right;flex:none;font-size:11.5px;line-height:1.5">${metrics}</div></div>`;
+  };
+  const none='<div style="padding:16px;color:var(--muted);font-size:12px">해당 기간 데이터 없음</div>';
+  const nvHtml=nv.length? nv.map((p,i)=>card(i+1,p.image,p.product,'네이버 쇼핑',metricBlock(p.ccnt,p.convAmt,p.clkCnt,p.impCnt,p.roas))).join('') : none;
+  const mtHtml=mt.length? mt.map((a,i)=>card(i+1,a.thumb,a.name,esc(a.account||'META')+(a.campaign?' · '+esc(a.campaign):''),metricBlock(a.purch,a.purchVal,a.clk,a.imp,a.roas))).join('') : none;
+  el.innerHTML=`<div class="panel" style="margin:0 0 14px"><h2>🏆 매체별 베스트 소재 <span style="font-size:11px;font-weight:500;color:var(--tx3)">· 전환수 기준 TOP 5</span></h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px">
+      <div><div style="font-size:12.5px;font-weight:700;color:#03C75A;margin-bottom:2px">🟢 네이버 쇼핑</div>${nvHtml}</div>
+      <div><div style="font-size:12.5px;font-weight:700;color:#4267B2;margin-bottom:2px">🔵 META</div>${mtHtml}</div>
+    </div>
+    <div class="glossary" style="margin:10px 0 0">💡 <b>네이버</b>는 쇼핑광고 상품, <b>META</b>는 광고(소재) 단위 · 각 <b>전환수(구매) 상위 5개</b>. 썸네일 클릭 시 크게 보기.</div>
+  </div>`;
 }
 
 // 🎯 실매출(Cafe24 UTM 유입) 기준 진짜 ROAS + 매체 보고와의 집계 기준 차이

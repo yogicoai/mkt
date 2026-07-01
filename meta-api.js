@@ -99,4 +99,33 @@ async function getMetaAds(account, campaign, start, end) {
   return { account: id, campaign: String(campaign), start: ymd(start), end: ymd(end), count: ads.length, ads };
 }
 
-module.exports = { enabled, getMetaBreakdown, getMetaAds, ACCOUNTS };
+// 계정 통합 소재(광고) 베스트 N — level=ad 계정단위 insights + 썸네일. 전체 탭 '매체별 베스트 소재'용.
+async function getMetaBestAds(start, end, limit = 5) {
+  const tr = encodeURIComponent(JSON.stringify({ since: ymd(start), until: ymd(end) }));
+  const all = [];
+  for (const acc of ACCOUNTS) {
+    const id = stripAct(acc.id);
+    try {
+      const rows = await mgetAll(`act_${id}/insights?level=ad&time_range=${tr}&fields=ad_id,ad_name,campaign_name,spend,impressions,clicks,actions,action_values&limit=500`);
+      rows.forEach((r) => all.push({ id: r.ad_id, name: r.ad_name, campaign: r.campaign_name, account: acc.platform, ...metricRow(r) }));
+    } catch (_) { /* 계정 실패 무시 */ }
+  }
+  let top = all.filter((a) => a.imp > 0)
+    .sort((a, b) => (b.purch - a.purch) || (b.clk - a.clk) || (b.imp - a.imp))
+    .slice(0, limit);
+  const ids = top.map((a) => a.id).filter(Boolean);
+  if (ids.length) {
+    try {
+      const thumbs = {};
+      for (let i = 0; i < ids.length; i += 50) {
+        const batch = ids.slice(i, i + 50);
+        const j = await mget(`?ids=${batch.join(',')}&fields=creative{thumbnail_url,image_url}`);
+        for (const k of Object.keys(j)) { const c = j[k] && j[k].creative; if (c) thumbs[k] = c.thumbnail_url || c.image_url || ''; }
+      }
+      top = top.map((a) => ({ ...a, thumb: thumbs[a.id] || '' }));
+    } catch (_) { /* 썸네일 실패 무시 */ }
+  }
+  return top;
+}
+
+module.exports = { enabled, getMetaBreakdown, getMetaAds, getMetaBestAds, ACCOUNTS };
