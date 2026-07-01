@@ -13,14 +13,24 @@ const VR = process.env.CRITEO_RETAIL_VERSION || '2025-07';
 
 function enabled() { return !!ID && !!SECRET; } // 광고주ID(ADV)는 승인 후 자동조회 → 키만 있으면 활성
 
+// fetch에 타임아웃(AbortController) — 크리테오 stall 시 무한 대기 방지
+async function fetchT(url, opts, ms = 15000) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ac.signal }); }
+  catch (e) { if (e && (e.name === 'AbortError' || /aborted/i.test(e.message || ''))) throw new Error(`크리테오 응답 지연(timeout ${Math.round(ms / 1000)}s)`); throw e; }
+  finally { clearTimeout(t); }
+}
+const _sumCache = new Map(); const SUM_TTL = 90 * 1000; // 요약 90초 캐시(재접근·자동갱신 시 재호출 방지)
+
 let _tok = null, _exp = 0;
 async function token() {
   if (_tok && Date.now() < _exp) return _tok;
-  const res = await fetch('https://api.criteo.com/oauth2/token', {
+  const res = await fetchT('https://api.criteo.com/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'client_credentials', client_id: ID, client_secret: SECRET }),
-  });
+  }, 12000);
   const j = await res.json();
   if (!j.access_token) throw new Error('크리테오 토큰 실패: ' + JSON.stringify(j));
   _tok = j.access_token;
@@ -34,7 +44,7 @@ async function token() {
 let _advCache = ADV ? (Array.isArray(ADV) ? ADV.join(',') : String(ADV)) : null;
 async function advertiserIds(tok) {
   if (_advCache) return _advCache;
-  const res = await fetch(`https://api.criteo.com/${V}/advertisers/me`, { headers: { Authorization: `Bearer ${tok}` } });
+  const res = await fetchT(`https://api.criteo.com/${V}/advertisers/me`, { headers: { Authorization: `Bearer ${tok}` } }, 12000);
   let j = null; try { j = await res.json(); } catch (_) {}
   const arr = (j && j.data) || [];
   const ids = (Array.isArray(arr) ? arr : [arr]).map((a) => a && (a.id != null ? a.id : (a.attributes && a.attributes.id))).filter(Boolean);
@@ -46,9 +56,9 @@ async function advertiserIds(tok) {
 async function balance(tok) {
   if (!RETAIL) return null;
   try {
-    const res = await fetch(`https://api.criteo.com/${VR}/retail-media/accounts/${RETAIL}/balances?pageSize=100`, {
+    const res = await fetchT(`https://api.criteo.com/${VR}/retail-media/accounts/${RETAIL}/balances?pageSize=100`, {
       headers: { Authorization: `Bearer ${tok}` },
-    });
+    }, 10000);
     const j = await res.json();
     const data = j.data || [];
     let dep = 0, sp = 0, rem = 0, hasRem = false;
@@ -114,6 +124,9 @@ module.exports = {
   enabled,
   getBreakdown,
   async getSummary(start, end) {
+    const ck = String(start) + '_' + String(end || start);
+    const hit = _sumCache.get(ck);
+    if (hit && Date.now() - hit.at < SUM_TTL) return hit.data;
     const tok = await token();
     const advIds = await advertiserIds(tok);
     const sd = dash(start), ed = dash(end || start); // 기간이면 일별 반환 → 아래서 합산
@@ -124,11 +137,11 @@ module.exports = {
       metrics: ['AdvertiserCost', 'SalesPc30dPv24h', 'RevenueGeneratedPc30dPv24h'],
       startDate: sd, endDate: ed, format: 'json', timezone: 'Asia/Seoul',
     };
-    const res = await fetch(`https://api.criteo.com/${V}/statistics/report`, {
+    const res = await fetchT(`https://api.criteo.com/${V}/statistics/report`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, 25000);
     const text = await res.text();
     let j; try { j = JSON.parse(text); } catch { j = text; }
     if (!res.ok) throw new Error('크리테오 통계 실패: ' + (typeof j === 'string' ? j.slice(0, 200) : JSON.stringify(j)));
@@ -154,11 +167,13 @@ module.exports = {
       }
     }
     const bal = await balance(tok);
-    return [{
+    const data = [{
       platform: '크리테오',
       spend: Math.round(spend), conversions: Math.round(conv), convValue: Math.round(rev),
       buyCnt: Math.round(conv), buyVal: Math.round(rev), cartCnt: 0, cartVal: 0, // 크리테오 sales=구매, 장바구니 별도 미제공
       balance: bal, currency: 'KRW', note: bal == null ? '잔액=Retail Media 연동시' : '',
     }];
+    _sumCache.set(ck, { at: Date.now(), data });
+    return data;
   },
 };

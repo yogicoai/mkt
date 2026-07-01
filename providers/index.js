@@ -19,10 +19,15 @@ async function getAllSummaries(start, end) {
   const hit = _sumCache.get(key);
   if (hit && Date.now() - hit.at < SUM_TTL) return hit.data;
   if (_sumInflight.has(key)) return _sumInflight.get(key); // 동시 요청은 한 번만 계산해 공유
+  // provider별 타임아웃 — 한 매체가 무한 대기해도 inflight가 영구 오염되지 않게(전체 무한 로딩 방지)
+  const withTimeout = (pr) => Promise.race([
+    Promise.resolve().then(() => pr.getSummary(start, end)),
+    new Promise((_, rej) => setTimeout(() => rej(new Error(pr.label + ' 응답 지연(timeout 40s)')), 40000)),
+  ]);
   const p = (async () => {
     const on = ALL.filter((pr) => pr.enabled());
     const off = ALL.filter((pr) => !pr.enabled()).map((pr) => pr.label);
-    const settled = await Promise.allSettled(on.map((pr) => pr.getSummary(start, end)));
+    const settled = await Promise.allSettled(on.map((pr) => withTimeout(pr)));
     const rows = [], errors = [];
     settled.forEach((r, i) => {
       if (r.status === 'fulfilled') rows.push(...(Array.isArray(r.value) ? r.value : [r.value]));
