@@ -967,8 +967,8 @@ function renderPlatforms(d, prev, gfa){
   $('#platforms').innerHTML=kpis+diag+'<div id="realgap"><div class="panel" style="margin:0 0 14px"><div class="state" style="padding:16px;font-size:12.5px"><div class="spin"></div>실매출(Cafe24) 대조 불러오는 중…</div></div></div>'+`<div class="panel"><h2>플랫폼 통합 비교 — 구매 · 장바구니 분리</h2>
     <table><thead><tr><th>플랫폼</th><th>광고비</th><th>구매전환수</th><th>구매전환매출</th><th>🛒장바구니수</th><th>🛒장바구니매출</th><th>구매ROAS</th><th>잔액</th></tr></thead>
     <tbody>${rows.map(tr).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--muted)">연동된 플랫폼 없음</td></tr>'}
-    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계 <span style="font-size:10px;color:var(--tx3);font-weight:500">(선택일·GFA 제외)</span></td><td>${won(sum.spend)}</td><td>${won(sum.buyCnt)}</td><td>${won(sum.buyVal)}</td><td style="color:var(--tx3)">${won(sum.cartCnt)}</td><td style="color:var(--tx3)">${won(sum.cartVal)}</td><td>${won(roas(sum.spend,sum.buyVal))}%</td><td>${won(sum.bal)}</td></tr>
     ${gfaRow}
+    <tr style="font-weight:800;border-top:2px solid var(--line)"><td>합계 <span style="font-size:10px;color:var(--tx3);font-weight:500">(선택일·GFA 제외)</span></td><td>${won(sum.spend)}</td><td>${won(sum.buyCnt)}</td><td>${won(sum.buyVal)}</td><td style="color:var(--tx3)">${won(sum.cartCnt)}</td><td style="color:var(--tx3)">${won(sum.cartVal)}</td><td>${won(roas(sum.spend,sum.buyVal))}%</td><td>${won(sum.bal)}</td></tr>
     </tbody></table>
     <div class="glossary" style="margin:8px 0 0">💡 <b>구매전환</b>=실결제(purchase) · <b>🛒장바구니</b>=담기(add_to_cart, 실매출 아님·참고) · <b>구매ROAS</b>=구매매출÷광고비. 매체별 효율 신호는 위 <b>⚡자동 진단</b> 참고. <b>네이버</b>는 당일 구매·장바구니 분해가 미제공이라 0으로 보일 수 있어요(어제 기준은 정상). <b>크리테오·카카오</b>는 장바구니 지표 미제공.${gR?' <b>GFA</b>는 업로드한 <b>전체기간(24~현재) 합산</b>(선택기간 무관)이라 매체 합계와 별도 표시.':''}</div>
     ${disabled}${errs}</div>`;
